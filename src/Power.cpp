@@ -107,6 +107,30 @@ static std::vector<Config> CONFIGS =
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
         LINE_PERIOD_TIME_US / 3
+    },
+    {
+        "Technikraum",
+        0, 6,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        0
+    },
+    {
+        "Garage",
+        0, 7,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        0
+    },
+    {
+        "Kuehlschrank",
+        1, 8,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        (LINE_PERIOD_TIME_US * 2) / 3
     }
 };
 
@@ -168,17 +192,6 @@ Power::Power()
         m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(config.m_name, config.m_chipID, config.m_channelID,
             -ADC_OFFSET + config.m_calOffset, REFERENCE_VOLTAGE * config.m_calFactor, config.m_calTimeOffset)));
     }
-
-#if 0
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -ADC_OFFSET + CAL_OFFSET_00, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK * CAL_FACTOR_00)));
-    m_channels[0]->add(m_currentChannels.back().get());
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w1", 0, 1, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
-    m_channels[0]->add(m_currentChannels.back().get());
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w2", 0, 2, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
-    m_channels[0]->add(m_currentChannels.back().get());
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w7", 0, 7, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
-    m_channels[0]->add(m_currentChannels.back().get());
-#endif
 
     m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET + CAL_OFFSET_VOLTAGE, REFERENCE_VOLTAGE * TRANSFORMER_LINE_VOLTAGE_RATIO * CAL_FACTOR_VOLTAGE));
 }
