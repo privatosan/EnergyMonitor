@@ -84,7 +84,7 @@ private:
     std::list<Stat> m_months;
     std::list<Stat> m_years;
 
-    uint32_t m_max;
+    float m_max;
     uint32_t m_maxHour;
     uint32_t m_maxMinute;
 

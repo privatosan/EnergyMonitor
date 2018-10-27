@@ -43,6 +43,13 @@ Value::Value(const std::string &code)
     }
     else
         throw std::runtime_error("Unhandled code");
+
+    // the converter value is 3% lower than the reference value from the
+    // electric meter
+    if ((m_code == "PAC") || (m_code == "KDY"))
+    {
+        m_fvalue.m_factor *= 1.03f;
+    }
 }
 
 Value::~Value()

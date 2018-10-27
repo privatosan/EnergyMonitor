@@ -10,6 +10,7 @@ set(SOURCES
 
 # include for headers
 include_directories(
+    ../include/bcm2835
     )
 
 add_library(${BINARY_NAME} STATIC ${SOURCES})

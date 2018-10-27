@@ -17,7 +17,7 @@ static const uint32_t NUM_CONVERTER = END_ADDRESS - START_ADDRESS + 1;
 
 Solar::Solar()
     : m_statChanged(false)
-    , m_max(0)
+    , m_max(0.f)
     , m_maxHour(0)
     , m_maxMinute(0)
 {
@@ -187,7 +187,7 @@ void Solar::writeStat()
             sum += value;
         }
 
-        postToPVOutput(date.str(), sum, static_cast<float>(m_max) / 1000.f,
+        postToPVOutput(date.str(), sum, m_max,
             m_maxHour, m_maxMinute);
     }
 }
@@ -212,9 +212,10 @@ void Solar::updateStat()
     // year is just 0 - 99
     localTime.tm_year %= 100;
 
-    // find the kwh channels for each converter
+    // find the kwh channels and cacl the max kw for each converter
     uint32_t address = START_ADDRESS;
     std::vector<float> values;
+    float fmax = 0.f;
     for (auto&& channels: m_channelsConverter)
     {
         std::ostringstream name;
@@ -222,10 +223,17 @@ void Solar::updateStat()
         for (auto &&channel : channels)
         {
             if (channel->name().compare(0, name.str().size(), name.str()) == 0)
+            {
                 values.push_back(channel->value()->value());
+            }
+            else
+            {
+                fmax += channel->value()->value();
+            }
         }
         address++;
     }
+
     if (values.size() != NUM_CONVERTER)
         throw std::runtime_error("Address and converter value mismatch");
 
@@ -239,23 +247,22 @@ void Solar::updateStat()
         newStat.m_values.resize(NUM_CONVERTER);
         m_days.push_front(newStat);
 
-        m_max = 0;
+        m_max = 0.f;
         m_maxHour = 0;
         m_maxMinute = 0;
     }
 
+    if (fmax > m_max)
+    {
+        m_max = fmax;
+        m_maxHour = localTime.tm_hour;
+        m_maxMinute = localTime.tm_min;
+    }
+
     Stat &day = m_days.front();
-    uint32_t max = 0;
     for (size_t index = 0; index < values.size(); ++index)
     {
         day.m_values[index] = (uint32_t)(values[index] * 1000.f + 0.5f);
-        max += day.m_values[index];
-    }
-    if (max > m_max)
-    {
-        m_max = max;
-        m_maxHour = localTime.tm_hour;
-        m_maxMinute = localTime.tm_min;
     }
 
     // check if the month is already in the array

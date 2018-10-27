@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 
+set(WIRINGPI OFF CACHE STRING "Use WiringPi lib")
+set(BCM2853 ON CACHE STRING "Use BCM 2853 lib")
+set(PRI ON CACHE STRING "Build for Raspberry PI")
+
 # default to release
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING
