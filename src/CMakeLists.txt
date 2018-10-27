@@ -35,6 +35,7 @@ include_directories(
 add_executable(${BINARY_NAME} ${SOURCES})
 
 if (RPI)
+    target_compile_definitions(${BINARY_NAME} PRIVATE RPI=1)
     target_link_libraries(${BINARY_NAME} bcm2835)
 endif ()
 target_link_libraries(${BINARY_NAME}

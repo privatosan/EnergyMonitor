@@ -20,6 +20,7 @@ public:
         {
             unsigned char m_start : 1;
             unsigned char m_zeroes : 7;
+
             unsigned char m_ignored : 4;
             unsigned char m_channel : 3;
             unsigned char m_single : 1;

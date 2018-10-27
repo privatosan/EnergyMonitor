@@ -45,7 +45,7 @@ Options &Options::getInstance()
 void Options::initialize()
 {
     m_logLevel = ERROR;
-    m_updatePeriod = std::chrono::seconds(5* 60);
+    m_updatePeriod = std::chrono::seconds(1 * 60);
 }
 
 void Options::parseCmdLine(int argc, char * const *argv)

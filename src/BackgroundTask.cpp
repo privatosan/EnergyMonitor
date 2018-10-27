@@ -1,6 +1,8 @@
 #include "BackgroundTask.h"
 #include "Options.h"
 
+#include "Log.h"
+
 BackgroundTask::BackgroundTask()
     : m_stop(false)
 {
@@ -18,7 +20,7 @@ void BackgroundTask::start()
 
     preStart();
 
-    m_thread.reset(new std::thread(&BackgroundTask::threadFunction, this));
+    m_thread.reset(new std::thread(&BackgroundTask::threadLoop, this));
 }
 
 void BackgroundTask::stop()
