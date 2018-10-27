@@ -17,6 +17,9 @@ static const uint32_t NUM_CONVERTER = END_ADDRESS - START_ADDRESS + 1;
 
 Solar::Solar()
     : m_statChanged(false)
+    , m_max(0)
+    , m_maxHour(0)
+    , m_maxMinute(0)
 {
     m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar")));
     m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar_kwh")));
@@ -184,7 +187,8 @@ void Solar::writeStat()
             sum += value;
         }
 
-        postToPVOutput(date.str(), sum);
+        postToPVOutput(date.str(), sum, static_cast<float>(m_max) / 1000.f,
+            m_maxHour, m_maxMinute);
     }
 }
 
@@ -234,12 +238,24 @@ void Solar::updateStat()
         newStat.m_year = localTime.tm_year;
         newStat.m_values.resize(NUM_CONVERTER);
         m_days.push_front(newStat);
+
+        m_max = 0;
+        m_maxHour = 0;
+        m_maxMinute = 0;
     }
 
     Stat &day = m_days.front();
+    uint32_t max = 0;
     for (size_t index = 0; index < values.size(); ++index)
     {
         day.m_values[index] = (uint32_t)(values[index] * 1000.f + 0.5f);
+        max += day.m_values[index];
+    }
+    if (max > m_max)
+    {
+        m_max = max;
+        m_maxHour = localTime.tm_hour;
+        m_maxMinute = localTime.tm_min;
     }
 
     // check if the month is already in the array

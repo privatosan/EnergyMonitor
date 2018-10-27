@@ -8,7 +8,7 @@
 
 #include <sstream>
 
-static const std::string IP_ADDR("192.168.178.25");
+static const std::string IP_ADDR("127.0.0.1");
 
 void post(const std::vector<const Channel*> &channels)
 {
@@ -43,7 +43,8 @@ void post(const std::vector<const Channel*> &channels)
     }
 }
 
-void postToPVOutput(const std::string &date, float dailyKWh)
+void postToPVOutput(const std::string &date, float dailyKWh, float dailyMax,
+    uint32_t dailyMaxHour, uint32_t dailyMaxMinute)
 {
     std::string url("https://pvoutput.org/service/r2/addoutput.jsp");
     std::list<std::string> header;
@@ -60,7 +61,8 @@ void postToPVOutput(const std::string &date, float dailyKWh)
         request.setOpt(new curlpp::options::HttpHeader(header));
 
         std::ostringstream data;
-        data << "data=" << date << "," << dailyKWh << "," << dailyKWh;// << "," << dailyMax;
+        data << "data=" << date << "," << dailyKWh << "," << dailyKWh << "," << dailyMax << "," <<
+            dailyMaxHour << ":" << dailyMaxMinute;
 
         request.setOpt(new curlpp::options::PostFields(data.str()));
         request.setOpt(new curlpp::options::PostFieldSize(data.str().length() + 1));

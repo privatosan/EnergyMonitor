@@ -84,6 +84,10 @@ private:
     std::list<Stat> m_months;
     std::list<Stat> m_years;
 
+    uint32_t m_max;
+    uint32_t m_maxHour;
+    uint32_t m_maxMinute;
+
     void getStat(const std::string file, const std::string start, std::list<Stat> &stats) const;
     void putStat(const std::string file, const std::string start, const std::list<Stat> &stats) const;
 
