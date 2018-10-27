@@ -20,6 +20,7 @@ set(SOURCES
     Post.cpp
     SignalHandler.cpp
     Solar.cpp
+    SolarMax.cpp
     Util.cpp
 )
 

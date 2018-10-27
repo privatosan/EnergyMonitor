@@ -4,12 +4,9 @@
 #include "Options.h"
 #include "Log.h"
 
-#include <curl/curl.h>
-
-// had been renamed
-#ifndef CURLINFO_ACTIVESOCKET
-#define CURLINFO_ACTIVESOCKET CURLINFO_LASTSOCKET
-#endif
+#include <curlpp/cURLpp.hpp>
+#include <curlpp/Easy.hpp>
+#include <curlpp/Options.hpp>
 
 #include <iostream>
 #include <thread>
@@ -18,131 +15,8 @@
 #include <iomanip>
 #include <stdexcept>
 
-static const std::string IP_ADDR("192.168.178.123");
-static const uint32_t PORT = 12345;
 static const uint32_t START_ADDRESS = 1;
 static const uint32_t END_ADDRESS = 3;
-
-struct CodeProperties
-{
-    const char *name;
-    float factor;
-};
-
-static CodeProperties Codes[] =
-{
-    { "ADR", 1.f },
-    { "TYP", 1.f },
-    { "SWV", 1.f },
-    { "DDY", 1.f },
-    { "DMT", 1.f },
-    { "DYR", 1.f },
-    { "THR", 1.f },
-    { "TMI", 1.f },
-    { "E11", 1.f },
-    { "E1D", 1.f },
-    { "E1M", 1.f },
-    { "E1h", 1.f },
-    { "E1m", 1.f },
-    { "E21", 1.f },
-    { "E2D", 1.f },
-    { "E2M", 1.f },
-    { "E2h", 1.f },
-    { "E2m", 1.f },
-    { "E31", 1.f },
-    { "E3D", 1.f },
-    { "E3M", 1.f },
-    { "E3h", 1.f },
-    { "E3m", 1.f },
-    { "KHR", 1.f },
-    { "KDY", .1f },
-    { "KLD", .1f },
-    { "KMT", 1.f },
-    { "KLM", 1.f },
-    { "KYR", 1.f },
-    { "KLY", 1.f },
-    { "KT0", 1.f },
-    { "LAN", 1.f },
-    { "UDC", .1f },
-    { "UL1", .1f },
-    { "IDC", .01f },
-    { "IL1", .01f },
-    { "PAC", .5f },
-    { "PIN", .5f },
-    { "PRL", 1.f },
-    { "CAC", 1.f },
-    { "FRD", 1.f },
-    { "SCD", 1.f },
-    { "SE1", 1.f },
-    { "SE1", 1.f },
-    { "SPR", 1.f },
-    { "TKK", 1.f },
-    { "TNF", 10.f },
-    { "SYS", 1.f },
-    { "BDN", 1.f },
-    { "EC00", 1.f },
-    { "EC01", 1.f },
-    { "EC02", 1.f },
-    { "EC03", 1.f },
-    { "EC04", 1.f },
-    { "EC05", 1.f },
-    { "EC06", 1.f },
-    { "EC07", 1.f },
-    { "EC08", 1.f },
-    { "DD00", 1.f },
-    { "DD01", 1.f },
-    { "DD02", 1.f },
-    { "DD03", 1.f },
-    { "DD04", 1.f },
-    { "DD05", 1.f },
-    { "DD06", 1.f },
-    { "DD07", 1.f },
-    { "DD08", 1.f },
-    { "DD09", 1.f },
-    { "DD10", 1.f },
-    { "DD11", 1.f },
-    { "DD12", 1.f },
-    { "DD13", 1.f },
-    { "DD14", 1.f },
-    { "DD15", 1.f },
-    { "DD16", 1.f },
-    { "DD17", 1.f },
-    { "DD18", 1.f },
-    { "DD19", 1.f },
-    { "DD20", 1.f },
-    { "DD21", 1.f },
-    { "DD22", 1.f },
-    { "DD23", 1.f },
-    { "DD24", 1.f },
-    { "DD25", 1.f },
-    { "DD26", 1.f },
-    { "DD27", 1.f },
-    { "DD28", 1.f },
-    { "DD29", 1.f },
-    { "DD30", 1.f },
-    { "DM00", 1.f },
-    { "DM01", 1.f },
-    { "DM02", 1.f },
-    { "DM03", 1.f },
-    { "DM04", 1.f },
-    { "DM05", 1.f },
-    { "DM06", 1.f },
-    { "DM07", 1.f },
-    { "DM08", 1.f },
-    { "DM09", 1.f },
-    { "DM10", 1.f },
-    { "DM11", 1.f },
-    { "DY00", 1.f },
-    { "DY01", 1.f },
-    { "DY02", 1.f },
-    { "DY03", 1.f },
-    { "DY04", 1.f },
-    { "DY05", 1.f },
-    { "DY06", 1.f },
-    { "DY07", 1.f },
-    { "DY08", 1.f },
-    { "DY09", 1.f },
-};
 
 Solar::Solar()
     : m_stop(false)
@@ -157,238 +31,155 @@ Solar::Solar()
 
         std::ostringstream name;
         name << "solar_w" << address;
-        channel.reset(new ChannelConverter(name.str(), address, ChannelConverter::Code::CODE_PAC));
+        channel.reset(new ChannelConverter(name.str(), address, new SolarMax::Value("PAC")));
         m_channelSolar[0]->add(channel.get());
         channels.push_back(std::move(channel));
 
         name.str("");
         name << "solar_kwh" << address;
-        channel.reset(new ChannelConverter(name.str(), address, ChannelConverter::Code::CODE_KDY));
+        channel.reset(new ChannelConverter(name.str(), address, new SolarMax::Value("KDY")));
         m_channelSolar[1]->add(channel.get());
         channels.push_back(std::move(channel));
 
         m_channelsConverter.push_back(std::move(channels));
     }
-
-    memset(&m_lastStatusUpdate, 0, sizeof(m_lastStatusUpdate));
 }
 
 Solar::~Solar()
 {
 }
 
-static std::string buildMessage(std::vector<ChannelConverter::Code> codes, uint32_t dst)
+void Solar::getStat(const std::string file, const std::string start, std::vector<Solar::Stat> &stats) const
 {
-    std::ostringstream data;
+    std::ostringstream reply;
 
-    bool first = true;
-    for (auto&& code: codes)
-    {
-        if (!first)
-            data << ";";
-        first = false;
-        data << Codes[(uint32_t)code].name;
-    }
-
-    const uint32_t src = 0xFB;
-    const size_t len =
-          1 // '{'
-        + 2 // 'FB' - source address (hex)
-        + 1 // ';'
-        + 2 // 'XX' - destination address (hex)
-        + 1 // ';'
-        + 2 // 'XX' - message length (complete message) (hex)
-        + 4 // '|64:'
-        + data.str().length() // data, codes separated by ';'
-        + 1 // '|'
-        + 4 // 'XXXX' - checksum (from source address to last char before checksum) (hex)
-        + 1;// '}'
-
-    std::ostringstream checksumMsg;
-    checksumMsg <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(2) << src << ";" <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(2) << dst << ";" <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(2) << len << "|64:" <<
-        data.str() << "|";
-
-    uint16_t checksum = 0;
-    for (auto&& c: checksumMsg.str())
-    {
-        checksum += c;
-    }
-
-    std::ostringstream msg;
-    msg <<
-        "{" << checksumMsg.str() <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(4) << checksum << "}";
-
-    return msg.str();
-}
-
-static std::vector<float> parseReply(uint32_t src, const std::string &reply, const std::vector<ChannelConverter::Code> codes)
-{
-    std::vector<float> result;
-
-    const uint32_t dst = 0xFB;
-    std::ostringstream expected;
-    expected <<
-        "{" <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(2) << src << ";" <<
-        std::setfill('0') << std::hex << std::uppercase << std::setw(2) << dst << ";";
-
-    size_t index = 0;
-    if (reply.compare(index, expected.str().length(), expected.str()) != 0)
-        throw std::runtime_error("Unexpected reply");
-    index += expected.str().length();
-
-    // length
-    index += 2;
-
-    // '|64:'
-    std::string delimiter("|64:");
-    if (reply.compare(index, delimiter.length(), delimiter) != 0)
-        throw std::runtime_error("Unexpected reply");
-    index += delimiter.length();
-
-    for (auto&& code: codes)
-    {
-        // check for code
-        std::string codeStr(Codes[(uint32_t)code].name);
-        if (reply.compare(index, codeStr.length(), codeStr) != 0)
-            throw std::runtime_error("Unexpected reply");
-        index += codeStr.length();
-
-        // skip the '='
-        if (reply[index] != '=')
-            throw std::runtime_error("Unexpected reply");
-        index++;
-
-        // get the value
-        uint32_t value = 0;
-        std::istringstream(reply.substr(index)) >> std::hex >> value;
-        float fvalue = (float)value * Codes[(uint32_t)code].factor;
-        result.push_back(fvalue);
-
-        Log(DEBUG) << codeStr << ": " << fvalue;
-
-        // skip ';'
-        size_t newIndex = reply.find_first_of(';', index);
-        if (newIndex == std::string::npos)
-        {
-            newIndex = reply.find_first_of('|', index);
-            if (newIndex == std::string::npos)
-                throw std::runtime_error("Unexpected reply, expected ';' or '|'");
-        }
-        index = newIndex + 1;
-    }
-
-    return result;
-}
-
-static int waitOnSocket(curl_socket_t sockfd, bool forRecv, long timeoutMs)
-{
-    struct timeval tv;
-    fd_set infd, outfd, errfd;
-    int res;
-
-    tv.tv_sec = timeoutMs / 1000;
-    tv.tv_usec= (timeoutMs % 1000) * 1000;
-
-    FD_ZERO(&infd);
-    FD_ZERO(&outfd);
-    FD_ZERO(&errfd);
-
-    FD_SET(sockfd, &errfd); /* always check for error */
-
-    if(forRecv)
-    {
-        FD_SET(sockfd, &infd);
-    }
-    else
-    {
-        FD_SET(sockfd, &outfd);
-    }
-
-    /* select() returns the number of signalled sockets or -1 */
-    res = select(sockfd + 1, &infd, &outfd, &errfd, &tv);
-    return res;
-}
-
-static bool askConverter(uint32_t address, std::vector<ChannelConverter::Code> &codes, std::vector<float> &result)
-{
-    bool success = true;
-    std::istringstream msg(buildMessage(codes, address));
-
-    Log(DEBUG) << "Solar: Send " << msg.str();
-
-    CURL *curl = nullptr;
     try
     {
-        std::ostringstream reply;
-        CURLcode res;
+        curlpp::Cleanup cleaner;
+        curlpp::Easy request;
 
-        curl = curl_easy_init();
-        if (!curl)
-            throw std::runtime_error("Could not init curl");
+        request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/") + file));
+        request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
 
-        curl_easy_setopt(curl, CURLOPT_URL, IP_ADDR.c_str());
-        curl_easy_setopt(curl, CURLOPT_PORT, PORT);
-        curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
-
-        res = curl_easy_perform(curl);
-        if (res != CURLE_OK)
-            throw std::runtime_error(curl_easy_strerror(res));
-
-        curl_socket_t sockfd;
-        res = curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sockfd);
-        if (res != CURLE_OK)
-            throw std::runtime_error(curl_easy_strerror(res));
-
-        size_t nsent = 0;
-        res = curl_easy_send(curl, msg.str().c_str(), msg.str().size(), &nsent);
-        if (res != CURLE_OK)
-            throw std::runtime_error(curl_easy_strerror(res));
-
-        char buf[512];
-        size_t nread;
-        do
-        {
-            nread = 0;
-            res = curl_easy_recv(curl, buf, sizeof(buf), &nread);
-            if (res == CURLE_AGAIN)
-            {
-                if (!waitOnSocket(sockfd, true, 1000L))
-                    throw std::runtime_error("Timeout");
-            }
-            if (nread != 0)
-            {
-                buf[nread] = 0;
-                reply << buf;
-            }
-        } while (res == CURLE_AGAIN);
-
-        if (res != CURLE_OK)
-            throw std::runtime_error(curl_easy_strerror(res));
-
-        Log(DEBUG) << "Solar: Reply " << reply.str();
-
-        result = parseReply(address, reply.str(), codes);
-
-        if (result.size() != codes.size())
-            throw std::runtime_error("Expected result count equal to codes count");
+        reply << request;
     }
     catch (std::exception &er)
     {
         Log(ERROR) << er.what();
-        success = false;
     }
-    if (curl)
-        curl_easy_cleanup(curl);
 
-    return success;
+    std::istringstream input(reply.str());
+    std::string line;
+    while (std::getline(input, line))
+    {
+        size_t index = 0;
+        size_t newIndex = line.find_first_of(start, index);
+        if (newIndex == std::string::npos)
+        {
+            Log(ERROR) << "Invalid string";
+            continue;
+        }
+        index = newIndex + start.length();
+
+        Stat stat;
+
+        std::istringstream(line.substr(index, 2)) >> stat.m_day;
+        index += 2;
+        if (line[index] != '.')
+        {
+            Log(ERROR) << "Invalid string";
+            continue;
+        }
+        ++index;
+
+        std::istringstream(line.substr(index, 2)) >> stat.m_month;
+        index += 2;
+        if (line[index] != '.')
+        {
+            Log(ERROR) << "Invalid string";
+            continue;
+        }
+        ++index;
+
+        std::istringstream(line.substr(index, 2)) >> stat.m_year;
+        index += 2;
+        if (line[index] != '|')
+        {
+            Log(ERROR) << "Invalid string";
+            continue;
+        }
+        ++index;
+
+        std::istringstream values(line.substr(index));
+        std::string valueStr;
+        while (std::getline(values, valueStr, '|'))
+        {
+            uint32_t value;
+            std::istringstream(valueStr) >> value;
+            stat.m_values.push_back(value);
+        }
+
+        stats.push_back(stat);
+    }
 }
 
-void Solar::readStatistics()
+void Solar::readStat()
+{
+    getStat("days_hist.js", "da[dx++]=\"", m_days);
+    getStat("months.js", "mo[mx++]=\"", m_months);
+    getStat("years.js", "ye[yx++]=\"", m_years);
+}
+
+void Solar::putStat(const std::string file, const std::string start, const std::vector<Solar::Stat> &stats) const
+{
+    std::ostringstream output;
+
+    for (auto&& stat: stats)
+    {
+        output << start <<
+            std::setfill('0') << std::setw(2) << stat.m_day << '.' <<
+            std::setfill('0') << std::setw(2) << stat.m_month << '.' <<
+            std::setfill('0') << std::setw(2) << stat.m_year << '|';
+
+        bool first = true;
+        for (auto&& value: stat.m_values)
+        {
+            output << (first ? "" : "|") << value;
+            first = false;
+        }
+        output << '"' << std::endl;
+    }
+
+    try
+    {
+        curlpp::Cleanup cleaner;
+        curlpp::Easy request;
+
+        request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/new") + file));
+        request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
+
+        std::istringstream stream(output.str());
+        request.setOpt(new curlpp::Options::ReadStream(&stream));
+        request.setOpt(new curlpp::Options::InfileSize(stream.str().size()));
+
+        request.setOpt(new curlpp::Options::Upload(true));
+
+        request.perform();
+    }
+    catch (std::exception &er)
+    {
+        Log(ERROR) << er.what();
+    }
+}
+
+void Solar::writeStat()
+{
+    putStat("days_hist.js", "da[dx++]=\"", m_days);
+    putStat("months.js", "mo[mx++]=\"", m_months);
+    putStat("years.js", "ye[yx++]=\"", m_years);
+}
+
+/*void Solar::readStatistics()
 {
     time_t curTime = time(nullptr);
     if (curTime == (time_t)-1)
@@ -411,21 +202,26 @@ void Solar::readStatistics()
 
     for (uint32_t address = START_ADDRESS; address <= END_ADDRESS; ++address)
     {
-        for (int day = (int)ChannelConverter::Code::CODE_DD00; day < (int)ChannelConverter::Code::CODE_DD30; ++day)
+        for (uint32_t day = 0; day <= localTime.tm_mday; ++day)
         {
-            std::vector<ChannelConverter::Code> codes;
-            codes.push_back((ChannelConverter::Code)day);
-            std::istringstream msg(buildMessage(codes, address));
-            std::vector<float> result;
-            if (!askConverter(address, codes, result))
+            std::vector<SolarMax::Value*> values;
+
+            std::ostringstream code;
+            code << "DD" << std::setfill('0') << std::setw(2) << day;
+            std::unique_ptr<SolarMax::Value> value(new SolarMax::Value(code.str()));
+
+            values.push_back(value.get());
+
+            if (!askConverter(address, values))
             {
                 return;
             }
+            std::cout << (*values.begin())->value() << std::endl;
         }
     }
 
     m_lastStatusUpdate = localTime;
-}
+}*/
 
 
 void Solar::threadFunction()
@@ -435,7 +231,7 @@ void Solar::threadFunction()
         uint32_t activeConverter = 0;
         for (auto &&channels : m_channelsConverter)
         {
-            std::vector<ChannelConverter::Code> codes;
+            std::vector<SolarMax::Value*> values;
             uint32_t address = 0;
 
             for (auto &&channel : channels)
@@ -445,28 +241,19 @@ void Solar::threadFunction()
                 else if(address != channel->address())
                     throw std::runtime_error("Channels of one group need to have the same address");
 
-                codes.push_back(channel->code());
+                values.push_back(channel->value());
             }
 
-            std::vector<float> result;
-            if (askConverter(address, codes, result))
+            if (SolarMax::askConverter(address, values))
             {
                 ++activeConverter;
-                auto it = result.cbegin();
                 for (auto &&channel : channels)
-                {
-                    channel->set(*it);
-                    ++it;
-                }
+                    channel->set(channel->value()->value());
             }
         }
 
         if (activeConverter != 0)
         {
-            // read statistics if all converters are active
-            if (activeConverter == END_ADDRESS - START_ADDRESS + 1)
-                readStatistics();
-
             std::vector<const Channel*> channels;
             for (auto &&channelsConverter : m_channelsConverter)
             {
@@ -493,6 +280,9 @@ void Solar::start()
     if (m_thread)
         throw std::runtime_error("Thread already running");
 
+    readStat();
+    writeStat();
+
     m_thread.reset(new std::thread(&Solar::threadFunction, this));
 }
 
@@ -510,3 +300,119 @@ void Solar::stop()
     m_thread->join();
     m_thread.reset();
 }
+
+enum class Code
+{
+    CODE_ADR,   // Address
+    CODE_TYP,   // Type
+    CODE_SWV,   // Software version
+    CODE_DDY,   // Date day
+    CODE_DMT,   // Date month
+    CODE_DYR,   // Date year
+    CODE_THR,   // Time hours
+    CODE_TMI,   // Time minutes
+    CODE_E11,   // Error 1, number
+    CODE_E1D,   // Error 1, day
+    CODE_E1M,   // Error 1, month
+    CODE_E1h,   // Error 1, hour
+    CODE_E1m,   // Error 1, minute
+    CODE_E21,   // Error 2, number
+    CODE_E2D,   // Error 2, day
+    CODE_E2M,   // Error 2, month
+    CODE_E2h,   // Error 2, hour
+    CODE_E2m,   // Error 2, minute
+    CODE_E31,   // Error 3, number
+    CODE_E3D,   // Error 3, day
+    CODE_E3M,   // Error 3, month
+    CODE_E3h,   // Error 3, hour
+    CODE_E3m,   // Error 3, minute
+    CODE_KHR,   // Operating hours
+    CODE_KDY,   // Energy today [kWh]
+    CODE_KLD,   // Energy last day [kWh]
+    CODE_KMT,   // Energy this month [kWh]
+    CODE_KLM,   // Energy last month [kWh]
+    CODE_KYR,   // Energy this year [kWh]
+    CODE_KLY,   // Energy last year [kWh]
+    CODE_KT0,   // Energy total [kWh]
+    CODE_LAN,   // Language
+    CODE_UDC,   // DC voltage [V]
+    CODE_UL1,   // AC voltage [V]
+    CODE_IDC,   // DC current [A]
+    CODE_IL1,   // AC current [A]
+    CODE_PAC,   // AC power [W]
+    CODE_PIN,   // Power installed [W]
+    CODE_PRL,   // AC power [%]
+    CODE_CAC,   // Start ups
+    CODE_FRD,   // ???
+    CODE_SCD,   // ???
+    CODE_SE1,   // ???
+    CODE_SE2,   // ???
+    CODE_SPR,   // ???
+    CODE_TKK,   // Temperature Heat Sink
+    CODE_TNF,   // Net frequency (Hz)
+    CODE_SYS,   // Operation State
+    CODE_BDN,   // Build number
+    CODE_EC00,  // Error-Code(?) 00
+    CODE_EC01,  // Error-Code(?) 01
+    CODE_EC02,  // Error-Code(?) 02
+    CODE_EC03,  // Error-Code(?) 03
+    CODE_EC04,  // Error-Code(?) 04
+    CODE_EC05,  // Error-Code(?) 05
+    CODE_EC06,  // Error-Code(?) 06
+    CODE_EC07,  // Error-Code(?) 07
+    CODE_EC08,  // Error-Code(?) 08
+    CODE_DD00,  // Statistic Day 0 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD01,  // Statistic Day 1 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD02,  // Statistic Day 2 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD03,  // Statistic Day 3 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD04,  // Statistic Day 4 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD05,  // Statistic Day 5 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD06,  // Statistic Day 6 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD07,  // Statistic Day 7 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD08,  // Statistic Day 8 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD09,  // Statistic Day 9 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD10,  // Statistic Day 10 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD11,  // Statistic Day 11 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD12,  // Statistic Day 12 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD13,  // Statistic Day 13 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD14,  // Statistic Day 14 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD15,  // Statistic Day 15 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD16,  // Statistic Day 16 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD17,  // Statistic Day 17 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD18,  // Statistic Day 18 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD19,  // Statistic Day 19 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD20,  // Statistic Day 20 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD21,  // Statistic Day 21 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD22,  // Statistic Day 22 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD23,  // Statistic Day 23 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD24,  // Statistic Day 24 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD25,  // Statistic Day 25 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD26,  // Statistic Day 26 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD27,  // Statistic Day 27 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD28,  // Statistic Day 28 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD29,  // Statistic Day 29 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DD30,  // Statistic Day 30 YYYMMDD,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM00,  // Statistic Month 0 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM01,  // Statistic Month 1 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM02,  // Statistic Month 2 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM03,  // Statistic Month 3 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM04,  // Statistic Month 4 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM05,  // Statistic Month 5 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM06,  // Statistic Month 6 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM07,  // Statistic Month 7 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM08,  // Statistic Month 8 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM09,  // Statistic Month 9 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM10,  // Statistic Month 10 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DM11,  // Statistic Month 11 YYYMM00,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY00,  // Statistic Year 0 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY01,  // Statistic Year 1 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY02,  // Statistic Year 2 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY03,  // Statistic Year 3 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY04,  // Statistic Year 4 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY05,  // Statistic Year 5 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY06,  // Statistic Year 6 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY07,  // Statistic Year 7 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY08,  // Statistic Year 8 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+    CODE_DY09,  // Statistic Year 9 YYY0000,Yield kWh*10,Peak W*2,Hours*10
+};
+
