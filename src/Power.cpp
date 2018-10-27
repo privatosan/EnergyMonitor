@@ -11,19 +11,18 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <vector>
 
 #include <unistd.h>
+#include <sched.h>
 
 static const float REFERENCE_VOLTAGE = 3.2986f; // measured
 // AD inputs are offset by this voltage so that DC voltages can be measured
 static const float ADC_OFFSET_VOLTAGE = 1.6488f; // measured
-static const float CT_AMPERE_PER_VOLT = 30.f;
-static const float CT_AMPERE_PER_VOLT_PEAK = CT_AMPERE_PER_VOLT * std::sqrt(2.f);
 static const uint32_t ADC_BITS = 10;
 static const uint32_t ADC_MASK = (1 << ADC_BITS) - 1;
 // zero point (ADC input connected to ADC_OFFSET_VOLTAGE)
-static const float ADC_OFFSET_0_0 = (517.0f / ADC_MASK); // measured
-static const float ADC_OFFSET_1_7 = (509.0f / ADC_MASK); // measured
+static const float ADC_OFFSET = (511.0f / ADC_MASK);
 static const float LINE_VOLTAGE = 230.0f;
 static const float LINE_VOLTAGE_PEAK = LINE_VOLTAGE * std::sqrt(2.f);
 static const float LINE_FREQUENCY = 50.0f;
@@ -34,8 +33,63 @@ static const float TRANSFORMER_RATIO = (230.0f / 12.50f); // measured
 static const float TRANSFORMER_LINE_VOLTAGE_RATIO = (228.0f / 0.962f); // measured
 static const double PI = std::acos(-1.f);
 
+// calibration
+static const float CAL_OFFSET_VOLTAGE = (-2.0f / ADC_MASK); // measured
+static const float CAL_FACTOR_VOLTAGE = 1.0f;
+
 // how many periods to read when calculating the power
-static const uint32_t PERIODS_TO_READ = 5;
+static const uint32_t PERIODS_TO_READ = 10;
+
+
+typedef struct
+{
+    const char *m_name;
+    uint32_t m_chipID;
+    uint32_t m_channelID;
+    float m_calOffset;
+    float m_calFactor;
+    float m_calTimeOffset;
+} Config;
+
+static std::vector<Config> CONFIGS_HOUSE =
+{
+    {
+        "HausL0",
+        0, 0,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 60.f) * 1800.f,
+        0
+    },
+    {
+        "HausL1",
+        0, 1,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 60.f) * 1800.f,
+        LINE_PERIOD_TIME_US / 3
+    },
+    {
+        "HausL2",
+        0, 2,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 60.f) * 1800.f,
+        (LINE_PERIOD_TIME_US * 2) / 2
+    },
+};
+
+static std::vector<Config> CONFIGS =
+{
+    {
+        "Wohnzimmer",
+        0, 3,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1800.f,
+        0,
+    }
+};
 
 #ifndef RPI
 #ifdef BCM2835
@@ -52,13 +106,53 @@ void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len) { }
 #endif
 #endif
 
+/**
+ * RAII type class to set the thread priority to real time
+ */
+class Scheduler
+{
+public:
+    Scheduler()
+        : m_policy(sched_getscheduler(m_pid))
+    {
+        sched_getparam(m_pid, &m_param);
+
+        auto param = m_param;
+        param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+        sched_setscheduler(m_pid, SCHED_FIFO, &param);
+    }
+
+    ~Scheduler()
+    {
+        sched_setscheduler(m_pid, m_policy, &m_param);
+    }
+
+private:
+    static const pid_t m_pid = 0;
+    int  m_policy;
+    struct sched_param m_param;
+};
+
+
 Power::Power()
 {
     m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("use")));
 
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -ADC_OFFSET_0_0, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
-    m_channels[0]->add(m_currentChannels.back().get());
+    for (auto &&config: CONFIGS_HOUSE)
+    {
+        m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(config.m_name, config.m_chipID, config.m_channelID,
+            -ADC_OFFSET + config.m_calOffset, REFERENCE_VOLTAGE * config.m_calFactor, config.m_calTimeOffset)));
+        m_channels[0]->add(m_currentChannels.back().get());
+    }
+    for (auto &&config: CONFIGS)
+    {
+        m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(config.m_name, config.m_chipID, config.m_channelID,
+            -ADC_OFFSET + config.m_calOffset, REFERENCE_VOLTAGE * config.m_calFactor, config.m_calTimeOffset)));
+    }
+
 #if 0
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -ADC_OFFSET + CAL_OFFSET_00, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK * CAL_FACTOR_00)));
+    m_channels[0]->add(m_currentChannels.back().get());
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w1", 0, 1, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w2", 0, 2, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
@@ -67,10 +161,7 @@ Power::Power()
     m_channels[0]->add(m_currentChannels.back().get());
 #endif
 
-    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, REFERENCE_VOLTAGE * TRANSFORMER_LINE_VOLTAGE_RATIO));
-    // vref * (R1+R2) / R2 * Vprim / Vsec
-    //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, REFERENCE_VOLTAGE * ((120.f + 10.f) / 10.f) * LINE_VOLTAGE_PEAK / TRANSFORMER_RATIO));
-    //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, LINE_VOLTAGE_PEAK / ((518.f - 252.f) / 1023.f)));
+    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET + CAL_OFFSET_VOLTAGE, REFERENCE_VOLTAGE * TRANSFORMER_LINE_VOLTAGE_RATIO * CAL_FACTOR_VOLTAGE));
 }
 
 Power::~Power()
@@ -88,16 +179,15 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
         BCM2835_SPI_CS1
     };
 
-    //Log(DEBUG) << "Select chip " << chipID;
+    // select the chip
     bcm2835_spi_chipSelect(cs[chipID]);
 #endif // BCM2835
 
     const size_t commandSize = sizeof(Command::m_sequence.m_data);
     unsigned char reply[commandSize];
 
-    for (auto&& cmd : cmds)
+    for (auto&& cmd: cmds)
     {
-//Log(DEBUG) << std::hex << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[0] << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[1] << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[2] << std::dec;
 #ifdef BCM2835
         bcm2835_spi_transfernb(reinterpret_cast<char*>(cmd.m_sequence.m_data),
             reinterpret_cast<char*>(reply), commandSize);
@@ -113,7 +203,6 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
             value <<= 8;
             value += reply[i];
         }
-//Log(DEBUG) << (uint32_t)cmd.m_sequence.m_bitfield.m_channel << ": " << value;
 
         // mask out undefined bits
         value &= ADC_MASK;
@@ -188,13 +277,16 @@ void Power::update()
     std::vector<std::vector<timeValueUs>> times(cmds.size());
     std::vector<size_t> indices(cmds.size());
 
+    // switch scheduler to high priority
+    std::unique_ptr<Scheduler> scheduler(new Scheduler());
+
     const timeValueUs sampleTimeUs = 1000000 / LINE_FREQUENCY * PERIODS_TO_READ;
-    timeValueUs curTimeUs;
     auto startTimeUs = time();
+    timeValueUs endTimeUs;
 
     do
     {
-        curTimeUs = time();
+        endTimeUs = time();
 
         for (auto&& value: values)
             value.clear();
@@ -208,15 +300,10 @@ void Power::update()
             ++chipID;
         }
 
-        for (auto&& index : indices)
+        for (auto&& index: indices)
             index = 0;
 
-        chipID = m_voltageChannel->chipID();
-        m_voltageChannel->setSample(times[chipID][indices[chipID]],
-            values[chipID][indices[chipID]]);
-        indices[chipID]++;
-
-        for (auto&& channel : m_currentChannels)
+        for (auto&& channel: m_currentChannels)
         {
             chipID = channel->chipID();
             channel->setSample(times[chipID][indices[chipID]],
@@ -224,30 +311,32 @@ void Power::update()
             indices[chipID]++;
         }
 
-#if 0
-        // limit to 100 samples per period
-        const timeValueUs diffTimeUs = time() - curTimeUs;
-        if (diffTimeUs < LINE_PERIOD_TIME_US / 100)
-            usleep(LINE_PERIOD_TIME_US / 100 - diffTimeUs);
-#endif
-    } while (curTimeUs - startTimeUs < sampleTimeUs);
+        chipID = m_voltageChannel->chipID();
+        m_voltageChannel->setSample(times[chipID][indices[chipID]],
+            values[chipID][indices[chipID]]);
+        indices[chipID]++;
+
+    } while (endTimeUs - startTimeUs < sampleTimeUs);
+
+    // back to standart priority
+    scheduler.reset();
 
     // find zero-crossing
     startTimeUs = 0;
-    auto prevValue = m_voltageChannel->value(0);
-    timeValueUs endTimeUs = 0;
+    endTimeUs = 0;
+    auto prevPositive = m_voltageChannel->value(0) >= 0.f;
     uint32_t halfPeriod = 0;
     uint32_t periods = 0;
     for (size_t index = 1; index < m_voltageChannel->sampleCount(); ++index)
     {
         const auto value = m_voltageChannel->value(index);
-        if (value * prevValue < 0.f)
+        const auto curPositive = value >= 0.f;
+        if (curPositive != prevPositive)
         {
             const auto timeUs = m_voltageChannel->sampleTime(index);
             if (startTimeUs == 0)
             {
                 startTimeUs = timeUs;
-Log(DEBUG) << startTimeUs;
             }
             else
             {
@@ -255,58 +344,64 @@ Log(DEBUG) << startTimeUs;
                 if ((halfPeriod & 1) == 0)
                 {
                     endTimeUs = timeUs;
-Log(DEBUG) << endTimeUs;
                     ++periods;
                 }
             }
+            prevPositive = curPositive;
         }
-        prevValue = value;
     }
 
-    Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
+//Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 
     // calculate power
     for (auto&& channel : m_currentChannels)
     {
-        Log(DEBUG) << "Samples " << channel->sampleCount();
+//Log(DEBUG) << "Samples " << channel->sampleCount();
 
         float p = 0.f;
         float i = 0.f;
         float u = 0.f;
-float imin = 10.f, imax = -10.f;
-float umin = 400.f, umax = -400.f;
+//float imin = 10.f, imax = -10.f;
+//float umin = 400.f, umax = -400.f;
         timeValueUs startSampleTimeUs = 0;
         timeValueUs endSampleTimeUs = 0;
         for (size_t index = 0; index < channel->sampleCount() - 1; ++index)
         {
             const timeValueUs time = channel->sampleTime(index);
+            // check if the time is in the interval, else continue with next sample
             if (time < startTimeUs)
                 continue;
+            // if this is the first sample, set the start time
             if (startSampleTimeUs == 0)
                 startSampleTimeUs = time;
+            // get the time of the next sample
             const timeValueUs nextTime = channel->sampleTime(index + 1);
+            // if the next time is outside of the interval we are done
             if (nextTime > endTimeUs)
-            {
                 break;
-            }
+            // ste the end time
             endSampleTimeUs = nextTime;
-            const float current = channel->value(index);
-imin = std::min(imin, current);
-imax = std::max(imax, current);
-            const float voltage = m_voltageChannel->sampleAtTime(time);
-umin = std::min(umin, voltage);
-umax = std::max(umax, voltage);
 
-//Log(WARN) << "U\t" << voltage << "\tI\t" << current;
+            // get the current
+            const float current = channel->value(index);
+            // get the voltage at the time modified by the phase
+            const auto voltageTime = time + channel->timeOffset();
+            // if the voltage time is outside of the interval we are done
+            if (voltageTime > endTimeUs)
+                break;
+            const float voltage = m_voltageChannel->sampleAtTime(voltageTime);
+
+//imin = std::min(imin, current);
+//imax = std::max(imax, current);
+//umin = std::min(umin, voltage);
+//umax = std::max(umax, voltage);
             i += current * current * (nextTime - time);
             u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
         }
 
-Log(DEBUG) << "I min/max " << imin << " " << imax;
-Log(DEBUG) << "U min/max " << umin << " " << umax;
-Log(DEBUG) << startSampleTimeUs;
-Log(DEBUG) << endSampleTimeUs;
+//Log(DEBUG) << "I min/max " << imin << " " << imax;
+//Log(DEBUG) << "U min/max " << umin << " " << umax;
 
         const float invTimeRangeUs = 1.f / (float)(endSampleTimeUs - startSampleTimeUs);
         p *= invTimeRangeUs;
@@ -314,7 +409,7 @@ Log(DEBUG) << endSampleTimeUs;
         u = std::sqrt(u);
         i *= invTimeRangeUs;
         i = std::sqrt(i);
-        Log(DEBUG) << "U " << u << " I " << i << " P " << p << std::endl;
+//Log(DEBUG) << "U " << u << " I " << i << " P " << p << std::endl;
         channel->set(p);
     }
 }
@@ -330,7 +425,7 @@ void Power::preStart()
 
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0); //Data comes in on falling edge
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_4096); // 19.2MHz / 32 = 600kHz
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048); // 19.2MHz / 32 = 600kHz
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS1, LOW);
 #elif defined(WIRINGPI)
@@ -365,43 +460,6 @@ void Power::threadFunction()
     }
 
 //    post(channels);
-
-#if 0
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);
-    uint64_t start = time();
-    do
-    {
-        Command cmd(0);
-        char reply[3];
-
-        bcm2835_spi_transfernb(cmd.m_sequence.m_data, reply, sizeof(reply));
-        printf("%d, %d\n", (uint32_t)(time() - start) / 1000,
-            (uint32_t)reply[1] * 0xFF + (uint32_t)reply[2]);
-        usleep(500);
-    } while(time() - start < 40000000);
-
-    for (unsigned int chipSelect = 0; chipSelect < 2; ++chipSelect)
-    {
-        const bcm2835SPIChipSelect cs[] =
-        {
-            BCM2835_SPI_CS0,
-            BCM2835_SPI_CS1
-        };
-        printf("chip %d\n", chipSelect);
-        bcm2835_spi_chipSelect(cs[chipSelect]);
-
-        for (unsigned int channel = 0; channel < 8; ++channel)
-        {
-            Command cmd(channel);
-            char reply[3];
-
-            printf("[%d] %02X %02X %02X -> ", channel, cmd.m_sequence.m_data[0],
-                cmd.m_sequence.m_data[1], cmd.m_sequence.m_data[2]);
-            bcm2835_spi_transfernb(cmd.m_sequence.m_data, reply, sizeof(reply));
-            printf("%02X %02X %02X\n", reply[0], reply[1], reply[2]);
-        }
-    }
-#endif
 }
 
 void Power::postStop()

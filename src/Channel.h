@@ -53,12 +53,13 @@ private:
 class ChannelAD : public Channel
 {
 public:
-    ChannelAD(std::string name, uint32_t chipID, uint32_t channelID, float offset, float factor)
+    ChannelAD(std::string name, uint32_t chipID, uint32_t channelID, float offset, float factor, timeValueUs timeOffsetUs = 0)
         : Channel(name)
         , m_chipID(chipID)
         , m_channelID(channelID)
         , m_offset(offset)
         , m_factor(factor)
+        , m_timeOffsetUs(timeOffsetUs)
     {
     }
 
@@ -70,6 +71,11 @@ public:
     uint32_t chipID() const
     {
         return m_chipID;
+    }
+
+    timeValueUs timeOffset() const
+    {
+        return m_timeOffsetUs;
     }
 
     void setSample(timeValueUs time, float value)
@@ -134,6 +140,7 @@ private:
     uint32_t m_channelID;
     float m_offset;
     float m_factor;
+    timeValueUs m_timeOffsetUs;
 };
 
 class ChannelSum : public Channel
