@@ -36,7 +36,14 @@ add_executable(${BINARY_NAME} ${SOURCES})
 
 if (RPI)
     target_compile_definitions(${BINARY_NAME} PRIVATE RPI=1)
-    target_link_libraries(${BINARY_NAME} bcm2835)
+    if (BCM2835)
+        target_compile_definitions(${BINARY_NAME} PRIVATE BCM2835=1)
+        target_link_libraries(${BINARY_NAME} bcm2835)
+    endif ()
+    if (WIRINGPI)
+        target_compile_definitions(${BINARY_NAME} PRIVATE WIRINGPI=1)
+        target_link_libraries(${BINARY_NAME} wiringPi)
+    endif ()
 endif ()
 target_link_libraries(${BINARY_NAME}
     ${CURL_LIBRARIES}

@@ -1,7 +1,12 @@
 #include "Power.h"
 #include "Post.h"
 
+#ifdef BCM2835
 #include <bcm2835/bcm2835.h>
+#elif defined(WIRINGPI)
+#include <wiringPi.h>
+#include <wiringPiSPI.h>
+#endif
 
 #include <cmath>
 #include <iostream>
@@ -29,6 +34,7 @@ static const double PI = std::acos(-1.f);
 static const uint32_t PERIODS_TO_READ = 3;
 
 #ifndef RPI
+#ifdef BCM2835
 int bcm2835_init(void) { return 1; }
 int bcm2835_close(void) { return 1; }
 int bcm2835_spi_begin() { return 1; }
@@ -39,6 +45,7 @@ void bcm2835_spi_setClockDivider(uint16_t divider) {}
 void bcm2835_spi_setChipSelectPolarity(uint8_t cs, uint8_t active) {}
 void bcm2835_spi_chipSelect(uint8_t cs) {}
 void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len) { }
+#endif
 #endif
 
 Power::Power()
@@ -51,9 +58,11 @@ Power::Power()
     m_channels[0]->add(m_currentChannels.back().get());
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w2", 0, 2, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w7", 0, 7, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
+    m_channels[0]->add(m_currentChannels.back().get());
 
     // vref / 2 * (R1+R2) / R2 * Vprim / Vsec
-    m_voltageChannel.reset(new ChannelAD("L1", 1, 6, -ADC_OFFSET, REFERENCE_VOLTAGE * ((120.f + 10.f) / 10.f) * LINE_VOLTAGE_PEAK / TRANSFORMER_RATIO));
+    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET, REFERENCE_VOLTAGE * ((120.f + 10.f) / 10.f) * LINE_VOLTAGE_PEAK / TRANSFORMER_RATIO));
     //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET, LINE_VOLTAGE_PEAK / ((518.f - 252.f) / 1023.f)));
 }
 
@@ -65,6 +74,7 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
     std::vector<timeValueUs> &times)
 {
 #ifdef RPI
+#ifdef BCM2835
     static const bcm2835SPIChipSelect cs[] =
     {
         BCM2835_SPI_CS0,
@@ -73,6 +83,7 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
 
     //Log(DEBUG) << "Select chip " << chipID;
     bcm2835_spi_chipSelect(cs[chipID]);
+#endif // BCM2835
 
     const size_t commandSize = sizeof(Command::m_sequence.m_data);
     unsigned char reply[commandSize];
@@ -80,8 +91,13 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
     for (auto&& cmd : cmds)
     {
 //Log(DEBUG) << std::hex << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[0] << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[1] << std::setw(2) << (uint32_t)cmd.m_sequence.m_data[2] << std::dec;
+#ifdef BCM2835
         bcm2835_spi_transfernb(reinterpret_cast<char*>(cmd.m_sequence.m_data),
             reinterpret_cast<char*>(reply), commandSize);
+#elif defined(WIRINGPI)
+        memcpy(reply, cmd.m_sequence.m_data, commandSize);
+        wiringPiSPIDataRW(chipID, reply, commandSize);
+#endif // BCM2835
         times.push_back(time());
 
         uint32_t value = 0;
@@ -90,7 +106,7 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
             value <<= 8;
             value += reply[i];
         }
-Log(DEBUG) << (uint32_t)cmd.m_sequence.m_bitfield.m_channel << ": " << value;
+//Log(DEBUG) << (uint32_t)cmd.m_sequence.m_bitfield.m_channel << ": " << value;
 
         // mask out undefined bits
         value &= ADC_MASK;
@@ -146,12 +162,6 @@ void Power::update()
 {
     std::vector<std::vector<Command>> cmds;
 
-    const uint32_t chipID = m_voltageChannel->chipID();
-    if (chipID >= cmds.size())
-        cmds.resize(chipID + 1);
-    cmds[chipID].push_back(m_voltageChannel->command());
-    m_voltageChannel->clearSamples();
-
     for (auto&& channel : m_currentChannels)
     {
         const uint32_t chipID = channel->chipID();
@@ -160,6 +170,12 @@ void Power::update()
         cmds[chipID].push_back(channel->command());
         channel->clearSamples();
     }
+
+    const uint32_t chipID = m_voltageChannel->chipID();
+    if (chipID >= cmds.size())
+        cmds.resize(chipID + 1);
+    cmds[chipID].push_back(m_voltageChannel->command());
+    m_voltageChannel->clearSamples();
 
     const timeValueUs sampleTime = 1000000 / LINE_FREQUENCY * PERIODS_TO_READ;
     timeValueUs startTime = time();
@@ -251,7 +267,8 @@ Log(DEBUG) << "U min/max " << umin << " " << umax;
 
 void Power::preStart()
 {
-    if(!bcm2835_init())
+#ifdef BCM2835
+    if (!bcm2835_init())
         throw std::runtime_error("Failed to init BCM 2835");
 
     if (!bcm2835_spi_begin())
@@ -262,6 +279,20 @@ void Power::preStart()
     bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_32); // 19.2MHz / 32 = 600kHz
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS1, LOW);
+#elif defined(WIRINGPI)
+    const int speed = 1 * 1000 * 1000;
+    if (wiringPiSetup() == -1)
+        throw std::runtime_error("Failed to setup WiringPI");
+    int fd;
+    fd = wiringPiSPISetup(0, speed);
+    if (fd == -1)
+        throw std::runtime_error("Failed to setup SPI channel 0");
+    m_fds.push_back(fd);
+    fd = wiringPiSPISetup(1, speed);
+    if (fd == -1)
+        throw std::runtime_error("Failed to setup SPI channel 1");
+    m_fds.push_back(fd);
+#endif
 }
 
 void Power::threadFunction()
@@ -321,7 +352,13 @@ void Power::threadFunction()
 
 void Power::postStop()
 {
+#ifdef BCM2835
     bcm2835_spi_end();
     if (!bcm2835_close())
         throw std::runtime_error("bcm2835_close() failed");
+#elif defined(WIRINGPI)
+    for (auto &&fd : m_fds)
+        close(fd);
+    m_fds.clear();
+#endif
 }

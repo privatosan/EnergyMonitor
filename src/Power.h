@@ -11,6 +11,10 @@ public:
     virtual ~Power();
 
 private:
+#ifdef WIRINGPI
+    std::vector<int> m_fds;
+#endif
+
     std::vector<std::unique_ptr<ChannelSum>> m_channels;
 
     std::unique_ptr<ChannelAD> m_voltageChannel;
