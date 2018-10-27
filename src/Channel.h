@@ -83,31 +83,17 @@ private:
     float m_factor;
 };
 
-class ChannelConverter : public Channel
-{
-public:
-    ChannelConverter(std::string name, uint32_t address)
-        : Channel(name)
-        , m_address(address)
-    {
-    }
-
-    uint32_t address() const
-    {
-        return m_address;
-    }
-
-private:
-    uint32_t m_address;
-};
-
 class ChannelSum : public Channel
 {
 public:
-    ChannelSum(std::string name, const std::vector<std::unique_ptr<Channel>> &channels)
+    ChannelSum(std::string name)
         : Channel(name)
-        , m_channels(channels)
     {
+    }
+
+    void add(const Channel *channel)
+    {
+        m_channels.push_back(channel);
     }
 
     void update()
@@ -119,7 +105,7 @@ public:
     }
 
 private:
-    const std::vector<std::unique_ptr<Channel>> &m_channels;
+    std::vector<const Channel *> m_channels;
 };
 
 #endif // CHANNEL_H

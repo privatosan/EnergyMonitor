@@ -2,6 +2,17 @@
 #define OPTIONS_H
 
 #include <chrono>
+#include <ostream>
+
+enum LogLevel
+{
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR
+};
+
+std::ostream& operator << (std::ostream& os, const LogLevel& logLevel);
 
 class Options
 {
@@ -10,9 +21,9 @@ public:
 
     void parseCmdLine(int argc, char * const *argv);
 
-    bool verbose() const
+    LogLevel logLevel() const
     {
-        return m_verbose;
+        return m_logLevel;
     }
 
     std::chrono::seconds updatePeriod() const
@@ -30,7 +41,7 @@ private:
 
     void initialize();
 
-    bool m_verbose;
+    LogLevel m_logLevel;
     std::chrono::seconds m_updatePeriod;
 };
 

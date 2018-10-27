@@ -1,5 +1,6 @@
 #include "Post.h"
 #include "Options.h"
+#include "Log.h"
 
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Options.hpp>
@@ -27,17 +28,16 @@ void post(const std::vector<const Channel*> &channels)
     {
         curlpp::Cleanup cleaner;
 
-        if (Options::getInstance().verbose())
-            std::cout << "Post msg: " << url.str() << std::endl;
+        Log(DEBUG) << "Post msg: " << url.str();
 
         std::ostringstream reply;
         reply << curlpp::options::Url(url.str());
 
-        if (Options::getInstance().verbose())
-            std::cout << "Post reply: " << reply.str() << std::endl;
+        if (reply.str() != "ok")
+            throw std::runtime_error("Expected reply 'ok' but got " + reply.str());
     }
     catch (std::exception &er)
     {
-        std::cerr << "Error: " << er.what() << std::endl;
+        Log(ERROR) << er.what();
     }
 }

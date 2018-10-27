@@ -14,6 +14,7 @@ project(energyMeter)
 set(BINARY_NAME energyMeter)
 
 set(SOURCES
+    Log.cpp
     Main.cpp
     Options.cpp
     Post.cpp

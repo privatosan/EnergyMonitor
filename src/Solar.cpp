@@ -2,6 +2,7 @@
 #include "Channel.h"
 #include "Post.h"
 #include "Options.h"
+#include "Log.h"
 
 #include <curl/curl.h>
 
@@ -22,149 +23,106 @@ static const uint32_t PORT = 12345;
 static const uint32_t START_ADDRESS = 1;
 static const uint32_t END_ADDRESS = 3;
 
-static const std::chrono::seconds UPDATE_PERIOD(10);
-
-enum class Code
+struct CodeProperties
 {
-    CODE_ADR,   // Address
-    CODE_TYP,   // Type
-    CODE_SWV,   // Software version
-    CODE_DDY,   // Date day
-    CODE_DMT,   // Date month
-    CODE_DYR,   // Date year
-    CODE_THR,   // Time hours
-    CODE_TMI,   // Time minutes
-    CODE_E11,   // Error 1, number
-    CODE_E1D,   // Error 1, day
-    CODE_E1M,   // Error 1, month
-    CODE_E1h,   // Error 1, hour
-    CODE_E1m,   // Error 1, minute
-    CODE_E21,   // Error 2, number
-    CODE_E2D,   // Error 2, day
-    CODE_E2M,   // Error 2, month
-    CODE_E2h,   // Error 2, hour
-    CODE_E2m,   // Error 2, minute
-    CODE_E31,   // Error 3, number
-    CODE_E3D,   // Error 3, day
-    CODE_E3M,   // Error 3, month
-    CODE_E3h,   // Error 3, hour
-    CODE_E3m,   // Error 3, minute
-    CODE_KHR,   // Operating hours
-    CODE_KDY,   // Energy today [Wh]
-    CODE_KLD,   // Energy last day [Wh]
-    CODE_KMT,   // Energy this month [kWh]
-    CODE_KLM,   // Energy last month [kWh]
-    CODE_KYR,   // Energy this year [kWh]
-    CODE_KLY,   // Energy last year [kWh]
-    CODE_KT0,   // Energy total [kWh]
-    CODE_LAN,   // Language
-    CODE_UDC,   // DC voltage [mV]
-    CODE_UL1,   // AC voltage [mV]
-    CODE_IDC,   // DC current [mA]
-    CODE_IL1,   // AC current [mA]
-    CODE_PAC,   // AC power [W]
-    CODE_PIN,   // Power installed [W]
-    CODE_PRL,   // AC power [%]
-    CODE_CAC,   // Start ups
-    CODE_FRD,   // ???
-    CODE_SCD,   // ???
-    CODE_SE1,   // ???
-    CODE_SE2,   // ???
-    CODE_SPR,   // ???
-    CODE_TKK,   // Temperature Heat Sink
-    CODE_TNF,   // Net frequency (Hz)
-    CODE_SYS,   // Operation State
-    CODE_BDN,   // Build number
-    CODE_EC00,  // Error-Code(?) 00
-    CODE_EC01,  // Error-Code(?) 01
-    CODE_EC02,  // Error-Code(?) 02
-    CODE_EC03,  // Error-Code(?) 03
-    CODE_EC04,  // Error-Code(?) 04
-    CODE_EC05,  // Error-Code(?) 05
-    CODE_EC06,  // Error-Code(?) 06
-    CODE_EC07,  // Error-Code(?) 07
-    CODE_EC08,  // Error-Code(?) 08
+    const char *name;
+    float factor;
 };
 
-static const char *CodeString[] =
+static CodeProperties Codes[] =
 {
-    "ADR",
-    "TYP",
-    "SWV",
-    "DDY",
-    "DMT",
-    "DYR",
-    "THR",
-    "TMI",
-    "E11",
-    "E1D",
-    "E1M",
-    "E1h",
-    "E1m",
-    "E21",
-    "E2D",
-    "E2M",
-    "E2h",
-    "E2m",
-    "E31",
-    "E3D",
-    "E3M",
-    "E3h",
-    "E3m",
-    "KHR",
-    "KDY",
-    "KLD",
-    "KMT",
-    "KLM",
-    "KYR",
-    "KLY",
-    "KT0",
-    "LAN",
-    "UDC",
-    "UL1",
-    "IDC",
-    "IL1",
-    "PAC",
-    "PIN",
-    "PRL",
-    "CAC",
-    "FRD",
-    "SCD",
-    "SE1",
-    "SE1",
-    "SPR",
-    "TKK",
-    "TNF",
-    "SYS",
-    "BDN",
-    "EC00",
-    "EC01",
-    "EC02",
-    "EC03",
-    "EC04",
-    "EC05",
-    "EC06",
-    "EC07",
-    "EC08",
+    { "ADR", 1.f },
+    { "TYP", 1.f },
+    { "SWV", 1.f },
+    { "DDY", 1.f },
+    { "DMT", 1.f },
+    { "DYR", 1.f },
+    { "THR", 1.f },
+    { "TMI", 1.f },
+    { "E11", 1.f },
+    { "E1D", 1.f },
+    { "E1M", 1.f },
+    { "E1h", 1.f },
+    { "E1m", 1.f },
+    { "E21", 1.f },
+    { "E2D", 1.f },
+    { "E2M", 1.f },
+    { "E2h", 1.f },
+    { "E2m", 1.f },
+    { "E31", 1.f },
+    { "E3D", 1.f },
+    { "E3M", 1.f },
+    { "E3h", 1.f },
+    { "E3m", 1.f },
+    { "KHR", 1.f },
+    { "KDY", .1f },
+    { "KLD", .1f },
+    { "KMT", 1.f },
+    { "KLM", 1.f },
+    { "KYR", 1.f },
+    { "KLY", 1.f },
+    { "KT0", 1.f },
+    { "LAN", 1.f },
+    { "UDC", .1f },
+    { "UL1", .1f },
+    { "IDC", .01f },
+    { "IL1", .01f },
+    { "PAC", .5f },
+    { "PIN", .5f },
+    { "PRL", 1.f },
+    { "CAC", 1.f },
+    { "FRD", 1.f },
+    { "SCD", 1.f },
+    { "SE1", 1.f },
+    { "SE1", 1.f },
+    { "SPR", 1.f },
+    { "TKK", 1.f },
+    { "TNF", 10.f },
+    { "SYS", 1.f },
+    { "BDN", 1.f },
+    { "EC00", 1.f },
+    { "EC01", 1.f },
+    { "EC02", 1.f },
+    { "EC03", 1.f },
+    { "EC04", 1.f },
+    { "EC05", 1.f },
+    { "EC06", 1.f },
+    { "EC07", 1.f },
+    { "EC08", 1.f },
 };
 
 Solar::Solar()
     : m_stop(false)
 {
+    m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar")));
+    m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar_kwh")));
+
     for (uint32_t address = START_ADDRESS; address <= END_ADDRESS; ++address)
     {
+        std::vector<std::unique_ptr<ChannelConverter>> channels;
+        std::unique_ptr<ChannelConverter> channel;
+
         std::ostringstream name;
         name << "solar_w" << address;
-        m_channelsConverter.push_back(std::unique_ptr<ChannelConverter>(new ChannelConverter(name.str(), address)));
+        channel.reset(new ChannelConverter(name.str(), address, ChannelConverter::Code::CODE_PAC));
+        m_channelSolar[0]->add(channel.get());
+        channels.push_back(std::move(channel));
+
+        name.str("");
+        name << "solar_kwh" << address;
+        channel.reset(new ChannelConverter(name.str(), address, ChannelConverter::Code::CODE_KDY));
+        m_channelSolar[1]->add(channel.get());
+        channels.push_back(std::move(channel));
+
+        m_channelsConverter.push_back(std::move(channels));
     }
-    m_channelSolar.reset(new ChannelSum("solar", reinterpret_cast<const std::vector<std::unique_ptr<Channel>>&>(m_channelsConverter)));
 }
 
 Solar::~Solar()
 {
 }
 
-static std::string buildMessage(std::vector<Code> codes, uint32_t dst)
+static std::string buildMessage(std::vector<ChannelConverter::Code> codes, uint32_t dst)
 {
     std::ostringstream data;
 
@@ -174,7 +132,7 @@ static std::string buildMessage(std::vector<Code> codes, uint32_t dst)
         if (!first)
             data << ";";
         first = false;
-        data << CodeString[(uint32_t)code];
+        data << Codes[(uint32_t)code].name;
     }
 
     const uint32_t src = 0xFB;
@@ -212,9 +170,9 @@ static std::string buildMessage(std::vector<Code> codes, uint32_t dst)
     return msg.str();
 }
 
-static std::vector<uint32_t> parseReply(uint32_t src, const std::string &reply, const std::vector<Code> codes)
+static std::vector<float> parseReply(uint32_t src, const std::string &reply, const std::vector<ChannelConverter::Code> codes)
 {
-    std::vector<uint32_t> result;
+    std::vector<float> result;
 
     const uint32_t dst = 0xFB;
     std::ostringstream expected;
@@ -239,22 +197,34 @@ static std::vector<uint32_t> parseReply(uint32_t src, const std::string &reply, 
 
     for (auto&& code: codes)
     {
-        std::string codeStr(CodeString[(uint32_t)code]);
-
+        // check for code
+        std::string codeStr(Codes[(uint32_t)code].name);
         if (reply.compare(index, codeStr.length(), codeStr) != 0)
             throw std::runtime_error("Unexpected reply");
         index += codeStr.length();
 
+        // skip the '='
         if (reply[index] != '=')
             throw std::runtime_error("Unexpected reply");
         index++;
 
+        // get the value
         uint32_t value = 0;
         std::istringstream(reply.substr(index)) >> std::hex >> value;
-        result.push_back(value);
+        float fvalue = (float)value * Codes[(uint32_t)code].factor;
+        result.push_back(fvalue);
 
-        if (Options::getInstance().verbose())
-            std::cout << codeStr << ": " << value << std::endl;
+        Log(DEBUG) << codeStr << ": " << fvalue;
+
+        // skip ';'
+        size_t newIndex = reply.find_first_of(';', index);
+        if (newIndex == std::string::npos)
+        {
+            newIndex = reply.find_first_of('|', index);
+            if (newIndex == std::string::npos)
+                throw std::runtime_error("Unexpected reply, expected ';' or '|'");
+        }
+        index = newIndex + 1;
     }
 
     return result;
@@ -289,20 +259,31 @@ static int waitOnSocket(curl_socket_t sockfd, bool forRecv, long timeoutMs)
     return res;
 }
 
+
+
 void Solar::threadFunction()
 {
-    std::vector<Code> codes;
-
-    codes.push_back(Code::CODE_PAC);
-
     while (!m_stop)
     {
-        for (auto &&channel : m_channelsConverter)
+        uint32_t activeConverter = 0;
+        for (auto &&channels : m_channelsConverter)
         {
-            std::istringstream msg(buildMessage(codes, channel->address()));
+            std::vector<ChannelConverter::Code> codes;
+            uint32_t address = 0;
 
-            if (Options::getInstance().verbose())
-                std::cout << "Solar: Send " << msg.str() << std::endl;
+            for (auto &&channel : channels)
+            {
+                if (address == 0)
+                    address = channel->address();
+                else if(address != channel->address())
+                    throw std::runtime_error("Channels of one group need to have the same address");
+
+                codes.push_back(channel->code());
+            }
+
+            std::istringstream msg(buildMessage(codes, address));
+
+            Log(DEBUG) << "Solar: Send " << msg.str();
 
             CURL *curl = nullptr;
             try
@@ -353,31 +334,50 @@ void Solar::threadFunction()
                 if (res != CURLE_OK)
                     throw std::runtime_error(curl_easy_strerror(res));
 
-                if (Options::getInstance().verbose())
-                    std::cout << "Solar: Reply " << reply.str() << std::endl;
-                auto result = parseReply(channel->address(), reply.str(), codes);
+                ++activeConverter;
 
-                channel->set(result[0]);
+                Log(DEBUG) << "Solar: Reply " << reply.str();
+
+                auto result = parseReply(address, reply.str(), codes);
+
+                if (result.size() != channels.size())
+                    throw std::runtime_error("Expected result count equal to channels count");
+
+                auto it = result.cbegin();
+                for (auto &&channel : channels)
+                {
+                    channel->set(*it);
+                    ++it;
+                }
             }
             catch (std::exception &er)
             {
-                std::cerr << "Error: " << er.what() << std::endl;
+                Log(ERROR) << er.what();
             }
             if (curl)
                 curl_easy_cleanup(curl);
         }
 
-        std::vector<const Channel*> channels;
-        for (auto &&channel : m_channelsConverter)
-            channels.push_back(channel.get());
+        if (activeConverter != 0)
+        {
+            std::vector<const Channel*> channels;
+            for (auto &&channelsConverter : m_channelsConverter)
+            {
+                for (auto &&channel : channelsConverter)
+                    channels.push_back(channel.get());
+            }
 
-        m_channelSolar->update();
-        channels.push_back(m_channelSolar.get());
+            for (auto &&channelSolar : m_channelSolar)
+            {
+                channelSolar->update();
+                channels.push_back(channelSolar.get());
+            }
 
-        post(channels);
+            post(channels);
+        }
 
         std::unique_lock<std::mutex> lock(cv_mutex);
-        m_conditionVariable.wait_for(lock, UPDATE_PERIOD);
+        m_conditionVariable.wait_for(lock, Options::getInstance().updatePeriod());
     }
 }
 

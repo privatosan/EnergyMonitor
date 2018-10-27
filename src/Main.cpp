@@ -2,6 +2,7 @@
 #include "Solar.h"
 #include "Post.h"
 #include "Options.h"
+#include "Log.h"
 
 #include <bcm2835/bcm2835.h>
 
@@ -178,13 +179,18 @@ int main(int argc, char * const *argv)
     SignalHandler signalHandler;
     while(!signalHandler.gotExitSignal())
     {
-        sleep(10);
-
         std::vector<const Channel*> postChannels;
         for (auto &&channel : channels)
             postChannels.push_back(channel.get());
 
         post(postChannels);
+
+        uint32_t sleepTime = Options::getInstance().updatePeriod().count();
+        while(!signalHandler.gotExitSignal())
+        {
+            sleep(1);
+            --sleepTime;
+        }
     }
 
     solar->stop();
