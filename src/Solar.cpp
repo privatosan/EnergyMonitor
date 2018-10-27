@@ -55,7 +55,7 @@ void Solar::getStat(const std::string file, const std::string start, std::list<S
         curlpp::Cleanup cleaner;
         curlpp::Easy request;
 
-        request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/") + file));
+        request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/www/PV-Anlage/") + file));
         request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
 
         reply << request;
@@ -150,7 +150,7 @@ void Solar::putStat(const std::string file, const std::string start, const std::
     curlpp::Cleanup cleaner;
     curlpp::Easy request;
 
-    request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/") + file));
+    request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/www/PV-Anlage/") + file));
     request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
 
     std::istringstream stream(output.str());
@@ -167,6 +167,25 @@ void Solar::writeStat()
     putStat("days_hist.js", "da[dx++]=\"", m_days);
     putStat("months.js", "mo[mx++]=\"", m_months);
     putStat("years.js", "ye[yx++]=\"", m_years);
+
+    if (!m_days.empty())
+    {
+        const Stat &day = m_days.front();
+
+        std::ostringstream date;
+        date << "20" <<
+            std::setfill('0') << std::setw(2) << day.m_year <<
+            std::setfill('0') << std::setw(2) << day.m_month <<
+            std::setfill('0') << std::setw(2) << day.m_day;
+
+        float sum = 0.f;
+        for (auto&& value: day.m_values)
+        {
+            sum += value;
+        }
+
+        postToPVOutput(date.str(), sum);
+    }
 }
 
 void Solar::updateStat()
@@ -349,7 +368,6 @@ void Solar::threadFunction()
             }
             if (success)
                 m_statChanged = false;
-
         }
     }
 }

@@ -3,6 +3,7 @@
 #include "Log.h"
 
 #include <curlpp/cURLpp.hpp>
+#include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
 
 #include <sstream>
@@ -35,6 +36,39 @@ void post(const std::vector<const Channel*> &channels)
 
         if (reply.str() != "ok")
             throw std::runtime_error("Expected reply 'ok' but got " + reply.str());
+    }
+    catch (std::exception &er)
+    {
+        Log(ERROR) << er.what();
+    }
+}
+
+void postToPVOutput(const std::string &date, float dailyKWh)
+{
+    std::string url("https://pvoutput.org/service/r2/addoutput.jsp");
+    std::list<std::string> header;
+
+    header.push_back("X-Pvoutput-Apikey: c934fca74a5aed7e0ee536a2cd8c74850e0cd1dc");
+    header.push_back("X-Pvoutput-SystemId: 59595");
+
+    try
+    {
+        curlpp::Cleanup cleaner;
+        curlpp::Easy request;
+
+        request.setOpt(new curlpp::options::Url(url));
+        request.setOpt(new curlpp::options::HttpHeader(header));
+
+        std::ostringstream data;
+        data << "data=" << date << "," << dailyKWh << "," << dailyKWh;// << "," << dailyMax;
+
+        request.setOpt(new curlpp::options::PostFields(data.str()));
+        request.setOpt(new curlpp::options::PostFieldSize(data.str().length() + 1));
+
+        std::ostringstream reply;
+        reply << request;
+        if (reply.str() != "OK 200: Added Output")
+            throw std::runtime_error("Expected reply 'OK 200: Added Output' but got " + reply.str());
     }
     catch (std::exception &er)
     {

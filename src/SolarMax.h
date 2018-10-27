@@ -23,6 +23,11 @@ public:
         return m_fvalue.m_value;
     }
 
+    float max() const
+    {
+        return m_stat.m_max;
+    }
+
     void parse(const std::string &value);
 
 private:
