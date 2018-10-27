@@ -8,18 +8,15 @@
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
 
-#include <iostream>
-#include <thread>
-#include <vector>
 #include <sstream>
 #include <iomanip>
-#include <stdexcept>
 
 static const uint32_t START_ADDRESS = 1;
 static const uint32_t END_ADDRESS = 3;
+static const uint32_t NUM_CONVERTER = END_ADDRESS - START_ADDRESS + 1;
 
 Solar::Solar()
-    : m_stop(false)
+    : m_statChanged(false)
 {
     m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar")));
     m_channelSolar.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("solar_kwh")));
@@ -49,7 +46,7 @@ Solar::~Solar()
 {
 }
 
-void Solar::getStat(const std::string file, const std::string start, std::vector<Solar::Stat> &stats) const
+void Solar::getStat(const std::string file, const std::string start, std::list<Solar::Stat> &stats) const
 {
     std::ostringstream reply;
 
@@ -130,7 +127,7 @@ void Solar::readStat()
     getStat("years.js", "ye[yx++]=\"", m_years);
 }
 
-void Solar::putStat(const std::string file, const std::string start, const std::vector<Solar::Stat> &stats) const
+void Solar::putStat(const std::string file, const std::string start, const std::list<Solar::Stat> &stats) const
 {
     std::ostringstream output;
 
@@ -150,26 +147,19 @@ void Solar::putStat(const std::string file, const std::string start, const std::
         output << '"' << std::endl;
     }
 
-    try
-    {
-        curlpp::Cleanup cleaner;
-        curlpp::Easy request;
+    curlpp::Cleanup cleaner;
+    curlpp::Easy request;
 
-        request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/new") + file));
-        request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
+    request.setOpt(new curlpp::Options::Url(std::string("ftp://privatosan.bplaced.net/PV-Anlage/") + file));
+    request.setOpt(new curlpp::Options::UserPwd("privatosan:vallejo71"));
 
-        std::istringstream stream(output.str());
-        request.setOpt(new curlpp::Options::ReadStream(&stream));
-        request.setOpt(new curlpp::Options::InfileSize(stream.str().size()));
+    std::istringstream stream(output.str());
+    request.setOpt(new curlpp::Options::ReadStream(&stream));
+    request.setOpt(new curlpp::Options::InfileSize(stream.str().size()));
 
-        request.setOpt(new curlpp::Options::Upload(true));
+    request.setOpt(new curlpp::Options::Upload(true));
 
-        request.perform();
-    }
-    catch (std::exception &er)
-    {
-        Log(ERROR) << er.what();
-    }
+    request.perform();
 }
 
 void Solar::writeStat()
@@ -179,7 +169,7 @@ void Solar::writeStat()
     putStat("years.js", "ye[yx++]=\"", m_years);
 }
 
-/*void Solar::readStatistics()
+void Solar::updateStat()
 {
     time_t curTime = time(nullptr);
     if (curTime == (time_t)-1)
@@ -187,118 +177,197 @@ void Solar::writeStat()
         Log(ERROR) << "Invalid time";
         return;
     }
+
     tm localTime;
     if (!localtime_r(&curTime, &localTime))
     {
         Log(ERROR) << "localtime() failed";
         return;
     }
+    // convert from 0 based to 1 based
+    localTime.tm_mon += 1;
+    // year is just 0 - 99
+    localTime.tm_year %= 100;
 
-    if ((localTime.tm_mday == m_lastStatusUpdate.tm_mday) &&
-        (localTime.tm_year == m_lastStatusUpdate.tm_year))
+    // find the kwh channels for each converter
+    uint32_t address = START_ADDRESS;
+    std::vector<uint32_t> values;
+    for (auto&& channels: m_channelsConverter)
     {
-        return;
+        std::ostringstream name;
+        name << "solar_kwh" << address;
+        for (auto &&channel : channels)
+        {
+            if (channel->name().compare(0, name.str().size(), name.str()) == 0)
+                values.push_back(channel->value()->value());
+        }
+        address++;
+    }
+    if (values.size() != NUM_CONVERTER)
+        throw std::runtime_error("Address and converter value mismatch");
+
+    // check if the day is already in the array
+    if ((m_days.size() == 0) || !(m_days.front().sameDay(localTime.tm_mday, localTime.tm_mon, localTime.tm_year)))
+    {
+        Stat newStat;
+        newStat.m_day = localTime.tm_mday;
+        newStat.m_month = localTime.tm_mon;
+        newStat.m_year = localTime.tm_year;
+        newStat.m_values.resize(NUM_CONVERTER);
+        m_days.push_front(newStat);
     }
 
-    for (uint32_t address = START_ADDRESS; address <= END_ADDRESS; ++address)
+    Stat &day = m_days.front();
+    for (size_t index = 0; index < values.size(); ++index)
     {
-        for (uint32_t day = 0; day <= localTime.tm_mday; ++day)
+        day.m_values[index] = (uint32_t)(values[index] * 1000.f + 0.5f);
+    }
+
+    // check if the month is already in the array
+    if ((m_months.size() == 0) || !(m_months.front().sameMonth(localTime.tm_mon, localTime.tm_year)))
+    {
+        Stat newStat;
+        newStat.m_day = localTime.tm_mday;
+        newStat.m_month = localTime.tm_mon;
+        newStat.m_year = localTime.tm_year;
+        newStat.m_values.resize(NUM_CONVERTER);
+        m_months.push_front(newStat);
+    }
+
+    // update month day and values
+    Stat &month = m_months.front();
+    month.m_day = localTime.tm_mday;
+    for (size_t index = 0; index < month.m_values.size(); ++index)
+        month.m_values[index] = 0;
+    for (auto&& day: m_days)
+    {
+        if (day.sameMonth(localTime.tm_mon, localTime.tm_year))
         {
-            std::vector<SolarMax::Value*> values;
-
-            std::ostringstream code;
-            code << "DD" << std::setfill('0') << std::setw(2) << day;
-            std::unique_ptr<SolarMax::Value> value(new SolarMax::Value(code.str()));
-
-            values.push_back(value.get());
-
-            if (!askConverter(address, values))
+            for (size_t index = 0; index < month.m_values.size(); ++index)
             {
-                return;
+                month.m_values[index] += day.m_values[index];
             }
-            std::cout << (*values.begin())->value() << std::endl;
         }
     }
 
-    m_lastStatusUpdate = localTime;
-}*/
+    // check if the year is already in the array
+    if ((m_years.size() == 0) || !(m_years.front().m_year == localTime.tm_year))
+    {
+        Stat newStat;
+        newStat.m_day = localTime.tm_mday;
+        newStat.m_month = localTime.tm_mon;
+        newStat.m_year = localTime.tm_year;
+        newStat.m_values.resize(NUM_CONVERTER);
+        m_years.push_front(newStat);
+    }
 
+    // update year day and month and values
+    Stat &year = m_years.front();
+    year.m_day = localTime.tm_mday;
+    year.m_month = localTime.tm_mon;
+    for (size_t index = 0; index < year.m_values.size(); ++index)
+        year.m_values[index] = 0;
+    for (auto&& month: m_months)
+    {
+        if (month.m_year == localTime.tm_year)
+        {
+            for (size_t index = 0; index < year.m_values.size(); ++index)
+            {
+                year.m_values[index] += month.m_values[index];
+            }
+        }
+    }
+
+    m_statChanged = true;
+}
+
+void Solar::preStart()
+{
+    // read statistics from FTP
+    readStat();
+}
 
 void Solar::threadFunction()
 {
-    while (!m_stop)
+    uint32_t activeConverter = 0;
+    for (auto &&channels : m_channelsConverter)
     {
-        uint32_t activeConverter = 0;
-        for (auto &&channels : m_channelsConverter)
-        {
-            std::vector<SolarMax::Value*> values;
-            uint32_t address = 0;
+        std::vector<SolarMax::Value*> values;
+        uint32_t address = 0;
 
+        for (auto &&channel : channels)
+        {
+            if (address == 0)
+                address = channel->address();
+            else if(address != channel->address())
+                throw std::runtime_error("Channels of one group need to have the same address");
+
+            values.push_back(channel->value());
+        }
+
+        if (SolarMax::askConverter(address, values))
+        {
+            ++activeConverter;
             for (auto &&channel : channels)
-            {
-                if (address == 0)
-                    address = channel->address();
-                else if(address != channel->address())
-                    throw std::runtime_error("Channels of one group need to have the same address");
-
-                values.push_back(channel->value());
-            }
-
-            if (SolarMax::askConverter(address, values))
-            {
-                ++activeConverter;
-                for (auto &&channel : channels)
-                    channel->set(channel->value()->value());
-            }
+                channel->set(channel->value()->value());
         }
-
-        if (activeConverter != 0)
-        {
-            std::vector<const Channel*> channels;
-            for (auto &&channelsConverter : m_channelsConverter)
-            {
-                for (auto &&channel : channelsConverter)
-                    channels.push_back(channel.get());
-            }
-
-            for (auto &&channelSolar : m_channelSolar)
-            {
-                channelSolar->update();
-                channels.push_back(channelSolar.get());
-            }
-
-            post(channels);
-        }
-
-        std::unique_lock<std::mutex> lock(cv_mutex);
-        m_conditionVariable.wait_for(lock, Options::getInstance().updatePeriod());
     }
-}
 
-void Solar::start()
-{
-    if (m_thread)
-        throw std::runtime_error("Thread already running");
-
-    readStat();
-    writeStat();
-
-    m_thread.reset(new std::thread(&Solar::threadFunction, this));
-}
-
-void Solar::stop()
-{
-    if (!m_thread)
-        throw std::runtime_error("No thread running");
-
+    if (activeConverter != 0)
     {
-        std::lock_guard<std::mutex> lock(cv_mutex);
-        m_stop = true;
-    }
-    m_conditionVariable.notify_all();
+        std::vector<const Channel*> channels;
+        for (auto &&channelsConverter : m_channelsConverter)
+        {
+            for (auto &&channel : channelsConverter)
+                channels.push_back(channel.get());
+        }
 
-    m_thread->join();
-    m_thread.reset();
+        for (auto &&channelSolar : m_channelSolar)
+        {
+            channelSolar->update();
+            channels.push_back(channelSolar.get());
+        }
+
+        post(channels);
+
+        updateStat();
+    }
+    else
+    {
+        // if no converter is active and stats had changed write the stats
+        if (m_statChanged)
+        {
+            bool success = true;
+            try
+            {
+                writeStat();
+            }
+            catch (std::exception &er)
+            {
+                Log(ERROR) << er.what();
+                success = false;
+            }
+            if (success)
+                m_statChanged = false;
+
+        }
+    }
+}
+
+void Solar::postStop()
+{
+    // write stat on shutdown
+    if (m_statChanged)
+    {
+        try
+        {
+            writeStat();
+        }
+        catch (std::exception &er)
+        {
+            Log(ERROR) << er.what();
+        }
+    }
 }
 
 enum class Code

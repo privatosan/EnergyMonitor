@@ -14,10 +14,12 @@ project(energyMeter)
 set(BINARY_NAME energyMeter)
 
 set(SOURCES
+    BackgroundTask.cpp
     Log.cpp
     Main.cpp
     Options.cpp
     Post.cpp
+    Power.cpp
     SignalHandler.cpp
     Solar.cpp
     SolarMax.cpp

@@ -3,6 +3,7 @@
 
 #include "Command.h"
 #include "Util.h"
+#include "Log.h"
 
 #include <string>
 #include <vector>
@@ -66,9 +67,14 @@ public:
         return Command(m_channelID);
     }
 
+    void set(timeValueMs time, float value)
+    {
+        m_values.push_back(TimeValue(time, (value + m_offset) * m_factor));
+    }
+
     virtual void set(float value)
     {
-        Channel::set((value + m_offset) * m_factor);
+        Log(ERROR) << "don't use";
     }
 
     uint32_t chipID() const
@@ -77,6 +83,18 @@ public:
     }
 
 private:
+    struct TimeValue
+    {
+        TimeValue(timeValueMs time, float value)
+            : m_time(time)
+            , m_value(value)
+        {
+        }
+        timeValueMs m_time;
+        float m_value;
+    };
+    std::vector<TimeValue> m_values;
+
     uint32_t m_chipID;
     uint32_t m_channelID;
     float m_offset;
