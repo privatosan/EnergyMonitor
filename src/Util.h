@@ -3,8 +3,8 @@
 
 #include <cstdint>
 
-using timeValueMs = uint64_t;
+using timeValueUs = uint64_t;
 
-timeValueMs time();
+timeValueUs time();
 
 #endif // TIME_H

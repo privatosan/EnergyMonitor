@@ -18,13 +18,13 @@ public:
     {
         struct
         {
-            char m_start : 1;
-            char m_zeroes : 7;
-            char m_ignored : 4;
-            char m_channel : 3;
-            char m_single : 1;
+            unsigned char m_start : 1;
+            unsigned char m_zeroes : 7;
+            unsigned char m_ignored : 4;
+            unsigned char m_channel : 3;
+            unsigned char m_single : 1;
         } m_bitfield;
-        char m_data[3];
+        unsigned char m_data[3];
     } m_sequence;
 };
 

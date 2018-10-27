@@ -12,8 +12,9 @@ static const float REFERENCE_VOLTAGE = 3.3f;
 static const float CT_AMPERE_PER_VOLT = 30.f;
 static const uint32_t ADC_BITS = 10;
 static const float LINE_VOLTAGE = 230.0f;
+static const float LINE_VOLTAGE_PEAK = 230.0f * std::sqrt(2.f);
 static const float LINE_FREQUENCY = 50.0f;
-static const double PI = std::acos(-1);
+static const double PI = std::acos(-1.f);
 
 // how many periods to read when calculating the power
 static const uint32_t PERIODS_TO_READ = 3;
@@ -28,20 +29,22 @@ void bcm2835_spi_setDataMode(uint8_t mode) {}
 void bcm2835_spi_setClockDivider(uint16_t divider) {}
 void bcm2835_spi_setChipSelectPolarity(uint8_t cs, uint8_t active) {}
 void bcm2835_spi_chipSelect(uint8_t cs) {}
-void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len)
-{
-}
+void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len) { }
 #endif
 
 Power::Power()
 {
-    m_channels.push_back(std::unique_ptr<Channel>(new Channel("use")));
-    m_channels.push_back(std::unique_ptr<Channel>(new Channel("import")));
+    m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("use")));
 
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("I0", 0, 0, -0.5f, REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT)));
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -0.5f, (REFERENCE_VOLTAGE / 2.f) * CT_AMPERE_PER_VOLT)));
+    m_channels[0]->add(m_currentChannels.back().get());
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w1", 0, 1, -0.5f, (REFERENCE_VOLTAGE / 2.f) * CT_AMPERE_PER_VOLT)));
+    m_channels[0]->add(m_currentChannels.back().get());
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w2", 0, 2, -0.5f, (REFERENCE_VOLTAGE / 2.f) * CT_AMPERE_PER_VOLT)));
+    m_channels[0]->add(m_currentChannels.back().get());
 
     // vref / 2 * (R1+R2) / R2 * Vprim / Vsec
-    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -0.5f, REFERENCE_VOLTAGE / 2.0f * 110.f / 10.f * LINE_VOLTAGE / 9.f));
+    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -0.5f, (REFERENCE_VOLTAGE / 2.f) * ((110.f / 10.f * LINE_VOLTAGE / 9.f))));
 }
 
 Power::~Power()
@@ -51,7 +54,7 @@ Power::~Power()
 static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float> &result)
 {
 #ifdef RPI
-    const bcm2835SPIChipSelect cs[] =
+    static const bcm2835SPIChipSelect cs[] =
     {
         BCM2835_SPI_CS0,
         BCM2835_SPI_CS1
@@ -84,40 +87,45 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
         result.push_back(normalized);
     }
 #else
-    static timeValueMs startTime = 0;
+    static timeValueUs startTime = 0;
     if (!startTime)
         startTime = time();
-    const timeValueMs curTime = startTime - time();
-    const float wave = sin((float)curTime / 1000.f * LINE_FREQUENCY * 2.0f * PI);
+    const timeValueUs curTime = time() - startTime;
+    const float wave = std::sin(std::fmod((float)curTime / 1000000.f / (1.f / LINE_FREQUENCY), 1.f) * 2.0f * PI);
     for (auto&& cmd : cmds)
     {
+        // factor to calculate voltage from input signal
         static const float factor[2][8] =
         {
             {
-                 0.9f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.5f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 1.6f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.8f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.1f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.2f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.3f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 0.4f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
+                 0.9f / CT_AMPERE_PER_VOLT, // 146.37 W
+                 0.5f / CT_AMPERE_PER_VOLT, // 81.32 W
+                 1.6f / CT_AMPERE_PER_VOLT, // 260.22 W
+                 0.8f / CT_AMPERE_PER_VOLT,
+                 0.1f / CT_AMPERE_PER_VOLT,
+                 0.2f / CT_AMPERE_PER_VOLT,
+                 0.3f / CT_AMPERE_PER_VOLT,
+                 0.4f / CT_AMPERE_PER_VOLT,
             },
             {
-                 1.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 2.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 3.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 4.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 5.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 6.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
-                 7.f / (REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT),
+                 1.f / CT_AMPERE_PER_VOLT,
+                 2.f / CT_AMPERE_PER_VOLT,
+                 3.f / CT_AMPERE_PER_VOLT,
+                 4.f / CT_AMPERE_PER_VOLT,
+                 5.f / CT_AMPERE_PER_VOLT,
+                 6.f / CT_AMPERE_PER_VOLT,
+                 7.f / CT_AMPERE_PER_VOLT, // 1138.44
                  // voltage channel
-                 LINE_VOLTAGE / REFERENCE_VOLTAGE / 2.0f * 110.f / 10.f * LINE_VOLTAGE / 9.f
+                 LINE_VOLTAGE_PEAK / (110.f / 10.f * LINE_VOLTAGE / 9.f)
             },
         };
 
         float value = wave * factor[chipID][cmd.m_sequence.m_bitfield.m_channel];
-        result.push_back((value + 1.f) / 2.f);
+        // convert to -.5 ... .5
+        value /= REFERENCE_VOLTAGE / 2.f;
+        // and to 0 ... 1
+        value += 0.5f;
+        result.push_back(value);
     }
 #endif
 }
@@ -130,6 +138,7 @@ void Power::update()
     if (chipID >= cmds.size())
         cmds.resize(chipID + 1);
     cmds[chipID].push_back(m_voltageChannel->command());
+    m_voltageChannel->clearSamples();
 
     for (auto&& channel : m_currentChannels)
     {
@@ -137,10 +146,11 @@ void Power::update()
         if (chipID >= cmds.size())
             cmds.resize(chipID + 1);
         cmds[chipID].push_back(channel->command());
+        channel->clearSamples();
     }
 
-    timeValueMs startTime = time();
-    timeValueMs curTime;
+    timeValueUs startTime = time();
+    timeValueUs curTime;
     do
     {
         std::vector<std::vector<float>> results;
@@ -162,43 +172,38 @@ void Power::update()
             index = 0;
 
         chipID = m_voltageChannel->chipID();
-        m_voltageChannel->set(curTime, results[chipID][indices[chipID]++]);
+        m_voltageChannel->setSample(curTime, results[chipID][indices[chipID]++]);
 
         for (auto&& channel : m_currentChannels)
         {
             chipID = channel->chipID();
-            channel->set(curTime, results[chipID][indices[chipID]++]);
+            channel->setSample(curTime, results[chipID][indices[chipID]++]);
         }
 
-        if (time() - curTime < 1)
-            usleep(100);
+        // limit to 100 samples per period
+        const timeValueUs diffTime = time() - curTime;
+        const timeValueUs periodTime = 1000000 / LINE_FREQUENCY;
+        if (diffTime < periodTime / 100.f)
+            usleep(periodTime / 100.f - diffTime);
 
-    } while(curTime - startTime < 1000 / LINE_FREQUENCY * PERIODS_TO_READ);
+    } while(curTime - startTime < 1000000 / LINE_FREQUENCY * PERIODS_TO_READ);
 
-    std::vector<float> power;
-    power.resize(m_currentChannels.size());
-
-    std::vector<float>::iterator pIt = power.begin();
-
+    // calculate power
     for (auto&& channel : m_currentChannels)
     {
         float p = 0.f;
-        for (size_t index = 0; index < channel->getValueCount(); ++index)
+        for (size_t index = 0; index < channel->sampleCount() - 1; ++index)
         {
-            const timeValueMs time = channel->getTime(index);
-            const float current = channel->get(time);
-            const float voltage = m_voltageChannel->get(time);
+            const timeValueUs time = channel->sampleTime(index);
+            const timeValueUs nextTime = channel->sampleTime(index + 1);
+            const float current = channel->sampleAtTime(time);
+            const float voltage = m_voltageChannel->sampleAtTime(time);
 
-            p += voltage * current;
+            p += (voltage * current) * (nextTime - time);
         }
-        p /= channel->getValueCount();
-        *pIt = p;
-        pIt++;
-    }
-
-    for (auto&& p : power)
-    {
-        std::cout << p << std::endl;
+        const timeValueUs timeRange = channel->sampleTime(channel->sampleCount() - 1) - channel->sampleTime(0);
+        p /= (float)timeRange;
+        channel->set(p);
     }
 }
 
@@ -219,19 +224,20 @@ void Power::preStart()
 
 void Power::threadFunction()
 {
-    size_t count = 10;
-    while (--count != 0)
+    update();
+
+    std::vector<const Channel*> channels;
+    for (auto &&channel : m_currentChannels)
     {
-        update();
-        usleep(1000);
+        channels.push_back(channel.get());
+    }
+    for (auto &&channel : m_channels)
+    {
+        channel->update();
+        channels.push_back(channel.get());
     }
 
-/*
-    std::vector<const Channel*> postChannels;
-    for (auto &&channel : m_channels)
-        postChannels.push_back(channel.get());
-
-    post(postChannels);*/
+    post(channels);
 
 #if 0
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);

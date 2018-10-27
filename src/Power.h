@@ -11,7 +11,7 @@ public:
     virtual ~Power();
 
 private:
-    std::vector<std::unique_ptr<Channel>> m_channels;
+    std::vector<std::unique_ptr<ChannelSum>> m_channels;
 
     std::unique_ptr<ChannelAD> m_voltageChannel;
     std::vector<std::unique_ptr<ChannelAD>> m_currentChannels;

@@ -38,7 +38,7 @@ public:
         return m_value;
     }
 
-    timeValueMs timestamp() const
+    timeValueUs timestamp() const
     {
         return m_timestamp;
     }
@@ -46,7 +46,7 @@ public:
 private:
     std::string m_name;
 
-    timeValueMs m_timestamp;
+    timeValueUs m_timestamp;
     float m_value;
 };
 
@@ -67,37 +67,27 @@ public:
         return Command(m_channelID);
     }
 
-    void set(timeValueMs time, float value)
-    {
-        m_values.push_back(TimeValue(time, (value + m_offset) * m_factor));
-    }
-
-    virtual void set(float value)
-    {
-        Log(ERROR) << "don't use";
-    }
-
     uint32_t chipID() const
     {
         return m_chipID;
     }
 
-    virtual void get()
+    void setSample(timeValueUs time, float value)
     {
-        Log(ERROR) << "don't use";
+        m_values.push_back(TimeValue(time, (value + m_offset) * m_factor));
     }
 
-    size_t getValueCount() const
+    size_t sampleCount() const
     {
         return m_values.size();
     }
 
-    timeValueMs getTime(size_t index) const
+    timeValueUs sampleTime(size_t index) const
     {
         return m_values[index].m_time;
     }
 
-    float get(timeValueMs time) const
+    float sampleAtTime(timeValueUs time) const
     {
         size_t index = 0;
 
@@ -117,7 +107,7 @@ public:
         return value;
     }
 
-    void clear()
+    void clearSamples()
     {
         m_values.clear();
     }
@@ -125,12 +115,12 @@ public:
 private:
     struct TimeValue
     {
-        TimeValue(timeValueMs time, float value)
+        TimeValue(timeValueUs time, float value)
             : m_time(time)
             , m_value(value)
         {
         }
-        timeValueMs m_time;
+        timeValueUs m_time;
         float m_value;
     };
     std::vector<TimeValue> m_values;
