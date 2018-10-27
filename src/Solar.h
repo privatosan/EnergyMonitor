@@ -6,7 +6,8 @@
 #include <condition_variable>
 #include <vector>
 
-class Channel;
+class ChannelConverter;
+class ChannelSum;
 
 class Solar
 {
@@ -17,7 +18,9 @@ public:
     void start();
     void stop();
 private:
-    std::vector<Channel> m_channels;
+    std::vector<std::unique_ptr<ChannelConverter>> m_channelsConverter;
+
+    std::unique_ptr<ChannelSum> m_channelSolar;
 
     std::unique_ptr<std::thread> m_thread;
 

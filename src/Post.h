@@ -5,6 +5,6 @@
 
 #include <vector>
 
-void post(const std::vector<Channel> &channels);
+void post(const std::vector<const Channel*> &channels);
 
 #endif // POST_H

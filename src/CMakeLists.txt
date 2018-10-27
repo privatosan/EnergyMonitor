@@ -1,12 +1,23 @@
 cmake_minimum_required(VERSION 2.8)
 
+# default to release
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+      "Choose the type of build, options are: None Debug Release."
+      FORCE)
+endif(NOT CMAKE_BUILD_TYPE)
+
+find_package(CURL REQUIRED)
+
 project(energyMeter)
 
 set(BINARY_NAME energyMeter)
 
 set(SOURCES
     Main.cpp
+    Options.cpp
     Post.cpp
+    SignalHandler.cpp
     Solar.cpp
     Util.cpp
 )
@@ -23,6 +34,7 @@ if (RPI)
     target_link_libraries(${BINARY_NAME} bcm2835)
 endif ()
 target_link_libraries(${BINARY_NAME}
+    ${CURL_LIBRARIES}
     curlpp
     pthread
     )

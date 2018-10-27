@@ -1,4 +1,5 @@
 #include "Post.h"
+#include "Options.h"
 
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Options.hpp>
@@ -7,7 +8,7 @@
 
 static const std::string IP_ADDR("192.168.178.25");
 
-void post(const std::vector<Channel> &channels)
+void post(const std::vector<const Channel*> &channels)
 {
     std::ostringstream url;
 
@@ -18,7 +19,7 @@ void post(const std::vector<Channel> &channels)
     {
         if (addComma)
             url << ",";
-        url << channel.name() << ":" << channel.value();
+        url << channel->name() << ":" << channel->value();
         addComma = true;
     }
     url << "}&apikey=ab7fc3c6f67f0b0369cc1aca4afd9e4c";
@@ -26,10 +27,14 @@ void post(const std::vector<Channel> &channels)
     {
         curlpp::Cleanup cleaner;
 
+        if (Options::getInstance().verbose())
+            std::cout << "Post msg: " << url.str() << std::endl;
+
         std::ostringstream reply;
         reply << curlpp::options::Url(url.str());
 
-        std::cout << reply.str() << std::endl;
+        if (Options::getInstance().verbose())
+            std::cout << "Post reply: " << reply.str() << std::endl;
     }
     catch (std::exception &er)
     {

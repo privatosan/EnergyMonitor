@@ -1,5 +1,7 @@
+#include "SignalHandler.h"
 #include "Solar.h"
 #include "Post.h"
+#include "Options.h"
 
 #include <bcm2835/bcm2835.h>
 
@@ -112,7 +114,7 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
 #endif
 }
 
-static void update(std::vector<Channel> &currentChannels, Channel &voltageChannel)
+static void update(std::vector<std::unique_ptr<ChannelAD>> &currentChannels, ChannelAD &voltageChannel)
 {
     std::vector<std::vector<Command>> cmds;
 
@@ -123,10 +125,10 @@ static void update(std::vector<Channel> &currentChannels, Channel &voltageChanne
 
 	for (auto&& channel : currentChannels)
 	{
-        const uint32_t chipID = channel.chipID();
+        const uint32_t chipID = channel->chipID();
         if (chipID >= cmds.size())
             cmds.resize(chipID + 1);
-        cmds[chipID].push_back(channel.command());
+        cmds[chipID].push_back(channel->command());
 	}
 
 	std::vector<float> power;
@@ -160,15 +162,30 @@ static void update(std::vector<Channel> &currentChannels, Channel &voltageChanne
 	} while(curTime - startTime < 1000 / LINE_FREQUENCY * PERIODS_TO_READ);
 }
 
-int main(int arc, char **argv)
+int main(int argc, char * const *argv)
 {
 #if 1
-    std::unique_ptr<Solar> solar(new Solar);
+    Options::getInstance().parseCmdLine(argc, argv);
 
+    std::unique_ptr<Solar> solar(new Solar);
     solar->start();
 
-    bool done = false;
-    while(!done);
+    std::vector<std::unique_ptr<Channel>> channels;
+
+    channels.push_back(std::unique_ptr<Channel>(new Channel("use")));
+    channels.push_back(std::unique_ptr<Channel>(new Channel("import")));
+
+    SignalHandler signalHandler;
+    while(!signalHandler.gotExitSignal())
+    {
+        sleep(10);
+
+        std::vector<const Channel*> postChannels;
+        for (auto &&channel : channels)
+            postChannels.push_back(channel.get());
+
+        post(postChannels);
+    }
 
     solar->stop();
 #else
@@ -184,11 +201,11 @@ int main(int arc, char **argv)
 
     const uint32_t updatePeriod = 1;	// in seconds
 
-    std::vector<Channel> currentChannels;
-    currentChannels.push_back(Channel("I0", 0, 0, -0.5f, REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT));
+    std::vector<std::unqique_ptr<ChannelAD>> currentChannels;
+    currentChannels.push_back(new ChannelAD("I0", 0, 0, -0.5f, REFERENCE_VOLTAGE / 2.f * CT_AMPERE_PER_VOLT));
 
     // vref / 2 * (R1+R2) / R2 * Vprim / Vsec
-    Channel voltageChannel("L1", 1, 7, -0.5f, REFERENCE_VOLTAGE / 2.0f * 110.f / 10.f * LINE_VOLTAGE / 9.f);
+    ChannelAD voltageChannel("L1", 1, 7, -0.5f, REFERENCE_VOLTAGE / 2.0f * 110.f / 10.f * LINE_VOLTAGE / 9.f);
 
     for (uint32_t i = 0; i < 1; ++i)
     {
