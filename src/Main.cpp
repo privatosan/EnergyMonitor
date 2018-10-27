@@ -16,12 +16,12 @@ int main(int argc, char * const *argv)
         Options::getInstance().parseCmdLine(argc, argv);
 
         // run solar tracking in the background
-        solar.reset(new Solar);
-        solar->start();
+//        solar.reset(new Solar);
+//        solar->start();
 
         // run power tracking in the background
-//        power.reset(new Power);
-//        power->start();
+        power.reset(new Power);
+        power->start();
 
         // wait for exit signal
         SignalHandler signalHandler;

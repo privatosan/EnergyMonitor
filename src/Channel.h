@@ -82,6 +82,11 @@ public:
         return m_values.size();
     }
 
+    float value(size_t index) const
+    {
+        return m_values[index].m_value;
+    }
+
     timeValueUs sampleTime(size_t index) const
     {
         return m_values[index].m_time;

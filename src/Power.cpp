@@ -15,23 +15,27 @@
 #include <unistd.h>
 
 static const float REFERENCE_VOLTAGE = 3.2986f; // measured
-// AD inputs are offset by this volatge so that DC volateges can be measured
+// AD inputs are offset by this voltage so that DC voltages can be measured
 static const float ADC_OFFSET_VOLTAGE = 1.6488f; // measured
 static const float CT_AMPERE_PER_VOLT = 30.f;
 static const float CT_AMPERE_PER_VOLT_PEAK = CT_AMPERE_PER_VOLT * std::sqrt(2.f);
 static const uint32_t ADC_BITS = 10;
 static const uint32_t ADC_MASK = (1 << ADC_BITS) - 1;
 // zero point (ADC input connected to ADC_OFFSET_VOLTAGE)
-static const float ADC_OFFSET = (503.0f / ADC_MASK); // measured
+static const float ADC_OFFSET_0_0 = (517.0f / ADC_MASK); // measured
+static const float ADC_OFFSET_1_7 = (509.0f / ADC_MASK); // measured
 static const float LINE_VOLTAGE = 230.0f;
 static const float LINE_VOLTAGE_PEAK = LINE_VOLTAGE * std::sqrt(2.f);
 static const float LINE_FREQUENCY = 50.0f;
+static const timeValueUs LINE_PERIOD_TIME_US = 1000000 / LINE_FREQUENCY;
 // transfomer ratio between primary and secondary
-static const float TRANSFORMER_RATIO = (233.0f / 12.60f); // measuread
+static const float TRANSFORMER_RATIO = (230.0f / 12.50f); // measured
+// ratio between input to transfomer and input to AD
+static const float TRANSFORMER_LINE_VOLTAGE_RATIO = (228.0f / 0.962f); // measured
 static const double PI = std::acos(-1.f);
 
 // how many periods to read when calculating the power
-static const uint32_t PERIODS_TO_READ = 3;
+static const uint32_t PERIODS_TO_READ = 5;
 
 #ifndef RPI
 #ifdef BCM2835
@@ -52,18 +56,21 @@ Power::Power()
 {
     m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("use")));
 
-    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
+    m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w0", 0, 0, -ADC_OFFSET_0_0, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
+#if 0
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w1", 0, 1, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w2", 0, 2, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
     m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD("House_w7", 0, 7, -ADC_OFFSET, REFERENCE_VOLTAGE * CT_AMPERE_PER_VOLT_PEAK)));
     m_channels[0]->add(m_currentChannels.back().get());
+#endif
 
-    // vref / 2 * (R1+R2) / R2 * Vprim / Vsec
-    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET, REFERENCE_VOLTAGE * ((120.f + 10.f) / 10.f) * LINE_VOLTAGE_PEAK / TRANSFORMER_RATIO));
-    //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET, LINE_VOLTAGE_PEAK / ((518.f - 252.f) / 1023.f)));
+    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, REFERENCE_VOLTAGE * TRANSFORMER_LINE_VOLTAGE_RATIO));
+    // vref * (R1+R2) / R2 * Vprim / Vsec
+    //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, REFERENCE_VOLTAGE * ((120.f + 10.f) / 10.f) * LINE_VOLTAGE_PEAK / TRANSFORMER_RATIO));
+    //m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET_1_7, LINE_VOLTAGE_PEAK / ((518.f - 252.f) / 1023.f)));
 }
 
 Power::~Power()
@@ -177,17 +184,22 @@ void Power::update()
     cmds[chipID].push_back(m_voltageChannel->command());
     m_voltageChannel->clearSamples();
 
-    const timeValueUs sampleTime = 1000000 / LINE_FREQUENCY * PERIODS_TO_READ;
-    timeValueUs startTime = time();
-    timeValueUs curTime;
+    std::vector<std::vector<float>> values(cmds.size());
+    std::vector<std::vector<timeValueUs>> times(cmds.size());
+    std::vector<size_t> indices(cmds.size());
+
+    const timeValueUs sampleTimeUs = 1000000 / LINE_FREQUENCY * PERIODS_TO_READ;
+    timeValueUs curTimeUs;
+    auto startTimeUs = time();
+
     do
     {
-        curTime = time();
-        std::vector<std::vector<float>> values;
-        std::vector<std::vector<timeValueUs>> times;
+        curTimeUs = time();
 
-        values.resize(cmds.size());
-        times.resize(cmds.size());
+        for (auto&& value: values)
+            value.clear();
+        for (auto&& time: times)
+            time.clear();
 
         uint32_t chipID = 0;
         for (auto&& chipCmd : cmds)
@@ -196,8 +208,6 @@ void Power::update()
             ++chipID;
         }
 
-        std::vector<size_t> indices;
-        indices.resize(cmds.size());
         for (auto&& index : indices)
             index = 0;
 
@@ -216,12 +226,44 @@ void Power::update()
 
 #if 0
         // limit to 100 samples per period
-        const timeValueUs diffTime = time() - curTime;
-        const timeValueUs periodTime = 1000000 / LINE_FREQUENCY;
-        if (diffTime < periodTime / 100)
-            usleep(periodTime / 100 - diffTime);
+        const timeValueUs diffTimeUs = time() - curTimeUs;
+        if (diffTimeUs < LINE_PERIOD_TIME_US / 100)
+            usleep(LINE_PERIOD_TIME_US / 100 - diffTimeUs);
 #endif
-    } while(curTime - startTime < sampleTime);
+    } while (curTimeUs - startTimeUs < sampleTimeUs);
+
+    // find zero-crossing
+    startTimeUs = 0;
+    auto prevValue = m_voltageChannel->value(0);
+    timeValueUs endTimeUs = 0;
+    uint32_t halfPeriod = 0;
+    uint32_t periods = 0;
+    for (size_t index = 1; index < m_voltageChannel->sampleCount(); ++index)
+    {
+        const auto value = m_voltageChannel->value(index);
+        if (value * prevValue < 0.f)
+        {
+            const auto timeUs = m_voltageChannel->sampleTime(index);
+            if (startTimeUs == 0)
+            {
+                startTimeUs = timeUs;
+Log(DEBUG) << startTimeUs;
+            }
+            else
+            {
+                ++halfPeriod;
+                if ((halfPeriod & 1) == 0)
+                {
+                    endTimeUs = timeUs;
+Log(DEBUG) << endTimeUs;
+                    ++periods;
+                }
+            }
+        }
+        prevValue = value;
+    }
+
+    Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 
     // calculate power
     for (auto&& channel : m_currentChannels)
@@ -231,21 +273,31 @@ void Power::update()
         float p = 0.f;
         float i = 0.f;
         float u = 0.f;
-        const timeValueUs startTime = channel->sampleTime(0);
 float imin = 10.f, imax = -10.f;
 float umin = 400.f, umax = -400.f;
+        timeValueUs startSampleTimeUs = 0;
+        timeValueUs endSampleTimeUs = 0;
         for (size_t index = 0; index < channel->sampleCount() - 1; ++index)
         {
-            const timeValueUs time = std::min(channel->sampleTime(index), startTime + sampleTime);
-            const timeValueUs nextTime = std::min(channel->sampleTime(index + 1), startTime + sampleTime);
-            const float current = channel->sampleAtTime(time);
+            const timeValueUs time = channel->sampleTime(index);
+            if (time < startTimeUs)
+                continue;
+            if (startSampleTimeUs == 0)
+                startSampleTimeUs = time;
+            const timeValueUs nextTime = channel->sampleTime(index + 1);
+            if (nextTime > endTimeUs)
+            {
+                break;
+            }
+            endSampleTimeUs = nextTime;
+            const float current = channel->value(index);
 imin = std::min(imin, current);
 imax = std::max(imax, current);
             const float voltage = m_voltageChannel->sampleAtTime(time);
 umin = std::min(umin, voltage);
 umax = std::max(umax, voltage);
 
-//Log(DEBUG) << "U " << voltage << " I " << current;
+//Log(WARN) << "U\t" << voltage << "\tI\t" << current;
             i += current * current * (nextTime - time);
             u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
@@ -253,12 +305,14 @@ umax = std::max(umax, voltage);
 
 Log(DEBUG) << "I min/max " << imin << " " << imax;
 Log(DEBUG) << "U min/max " << umin << " " << umax;
+Log(DEBUG) << startSampleTimeUs;
+Log(DEBUG) << endSampleTimeUs;
 
-        const timeValueUs timeRange = channel->sampleTime(channel->sampleCount() - 1) - channel->sampleTime(0);
-        p /= (float)sampleTime;
-        u /= (float)sampleTime;
+        const float invTimeRangeUs = 1.f / (float)(endSampleTimeUs - startSampleTimeUs);
+        p *= invTimeRangeUs;
+        u *= invTimeRangeUs;
         u = std::sqrt(u);
-        i /= (float)sampleTime;
+        i *= invTimeRangeUs;
         i = std::sqrt(i);
         Log(DEBUG) << "U " << u << " I " << i << " P " << p << std::endl;
         channel->set(p);
@@ -276,7 +330,7 @@ void Power::preStart()
 
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0); //Data comes in on falling edge
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_32); // 19.2MHz / 32 = 600kHz
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_4096); // 19.2MHz / 32 = 600kHz
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS1, LOW);
 #elif defined(WIRINGPI)
