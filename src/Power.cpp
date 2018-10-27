@@ -61,24 +61,32 @@ static std::vector<Config> CONFIGS_HOUSE =
         0, 0,
         0.f,
         // (U / R) * ratio
-        (1.f / 60.f) * 1800.f,
-        0
+        (1.f / 62.f) * 1860.f,
+        (LINE_PERIOD_TIME_US * 2) / 3
     },
     {
         "HausL1",
         0, 1,
         0.f,
         // (U / R) * ratio
-        (1.f / 60.f) * 1800.f,
-        (LINE_PERIOD_TIME_US * 2) / 3
+        (1.f / 62.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3
     },
     {
         "HausL2",
         0, 2,
         0.f,
         // (U / R) * ratio
-        (1.f / 60.f) * 1800.f,
-        LINE_PERIOD_TIME_US / 3
+        (1.f / 62.f) * 1860.f,
+        0
+    },
+    {
+        "Wärmepumpe",
+        0, 4,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 62.f) * 1860.f,
+        (LINE_PERIOD_TIME_US * 2) / 3
     },
 };
 
@@ -89,8 +97,16 @@ static std::vector<Config> CONFIGS =
         0, 3,
         0.f,
         // (U / R) * ratio
-        (1.f / 120.f) * 1800.f,
-        (LINE_PERIOD_TIME_US * 2) / 3
+        (1.f / 120.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3
+    },
+    {
+        "Arbeitszimmer",
+        0, 5,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3
     }
 };
 
@@ -399,8 +415,8 @@ void Power::update()
 //umin = std::min(umin, voltage);
 //umax = std::max(umax, voltage);
 //std::cout << current << ";" << voltage << std::endl;
-            i += current * current * (nextTime - time);
-            u += voltage * voltage * (nextTime - time);
+//            i += current * current * (nextTime - time);
+//            u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
         }
 
@@ -409,10 +425,10 @@ void Power::update()
 
         const float invTimeRangeUs = 1.f / (float)(endSampleTimeUs - startSampleTimeUs);
         p *= invTimeRangeUs;
-        u *= invTimeRangeUs;
-        u = std::sqrt(u);
-        i *= invTimeRangeUs;
-        i = std::sqrt(i);
+//        u *= invTimeRangeUs;
+//        u = std::sqrt(u);
+//        i *= invTimeRangeUs;
+//        i = std::sqrt(i);
 //Log(DEBUG) << channel->name() << ": U " << u << " I " << i << " P " << p;
         channel->set(p);
     }
