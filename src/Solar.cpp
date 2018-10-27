@@ -89,6 +89,59 @@ static CodeProperties Codes[] =
     { "EC06", 1.f },
     { "EC07", 1.f },
     { "EC08", 1.f },
+    { "DD00", 1.f },
+    { "DD01", 1.f },
+    { "DD02", 1.f },
+    { "DD03", 1.f },
+    { "DD04", 1.f },
+    { "DD05", 1.f },
+    { "DD06", 1.f },
+    { "DD07", 1.f },
+    { "DD08", 1.f },
+    { "DD09", 1.f },
+    { "DD10", 1.f },
+    { "DD11", 1.f },
+    { "DD12", 1.f },
+    { "DD13", 1.f },
+    { "DD14", 1.f },
+    { "DD15", 1.f },
+    { "DD16", 1.f },
+    { "DD17", 1.f },
+    { "DD18", 1.f },
+    { "DD19", 1.f },
+    { "DD20", 1.f },
+    { "DD21", 1.f },
+    { "DD22", 1.f },
+    { "DD23", 1.f },
+    { "DD24", 1.f },
+    { "DD25", 1.f },
+    { "DD26", 1.f },
+    { "DD27", 1.f },
+    { "DD28", 1.f },
+    { "DD29", 1.f },
+    { "DD30", 1.f },
+    { "DM00", 1.f },
+    { "DM01", 1.f },
+    { "DM02", 1.f },
+    { "DM03", 1.f },
+    { "DM04", 1.f },
+    { "DM05", 1.f },
+    { "DM06", 1.f },
+    { "DM07", 1.f },
+    { "DM08", 1.f },
+    { "DM09", 1.f },
+    { "DM10", 1.f },
+    { "DM11", 1.f },
+    { "DY00", 1.f },
+    { "DY01", 1.f },
+    { "DY02", 1.f },
+    { "DY03", 1.f },
+    { "DY04", 1.f },
+    { "DY05", 1.f },
+    { "DY06", 1.f },
+    { "DY07", 1.f },
+    { "DY08", 1.f },
+    { "DY09", 1.f },
 };
 
 Solar::Solar()
@@ -116,6 +169,8 @@ Solar::Solar()
 
         m_channelsConverter.push_back(std::move(channels));
     }
+
+    memset(&m_lastStatusUpdate, 0, sizeof(m_lastStatusUpdate));
 }
 
 Solar::~Solar()
@@ -259,6 +314,118 @@ static int waitOnSocket(curl_socket_t sockfd, bool forRecv, long timeoutMs)
     return res;
 }
 
+static bool askConverter(uint32_t address, std::vector<ChannelConverter::Code> &codes, std::vector<float> &result)
+{
+    bool success = true;
+    std::istringstream msg(buildMessage(codes, address));
+
+    Log(DEBUG) << "Solar: Send " << msg.str();
+
+    CURL *curl = nullptr;
+    try
+    {
+        std::ostringstream reply;
+        CURLcode res;
+
+        curl = curl_easy_init();
+        if (!curl)
+            throw std::runtime_error("Could not init curl");
+
+        curl_easy_setopt(curl, CURLOPT_URL, IP_ADDR.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, PORT);
+        curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK)
+            throw std::runtime_error(curl_easy_strerror(res));
+
+        curl_socket_t sockfd;
+        res = curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sockfd);
+        if (res != CURLE_OK)
+            throw std::runtime_error(curl_easy_strerror(res));
+
+        size_t nsent = 0;
+        res = curl_easy_send(curl, msg.str().c_str(), msg.str().size(), &nsent);
+        if (res != CURLE_OK)
+            throw std::runtime_error(curl_easy_strerror(res));
+
+        char buf[512];
+        size_t nread;
+        do
+        {
+            nread = 0;
+            res = curl_easy_recv(curl, buf, sizeof(buf), &nread);
+            if (res == CURLE_AGAIN)
+            {
+                if (!waitOnSocket(sockfd, true, 1000L))
+                    throw std::runtime_error("Timeout");
+            }
+            if (nread != 0)
+            {
+                buf[nread] = 0;
+                reply << buf;
+            }
+        } while (res == CURLE_AGAIN);
+
+        if (res != CURLE_OK)
+            throw std::runtime_error(curl_easy_strerror(res));
+
+        Log(DEBUG) << "Solar: Reply " << reply.str();
+
+        result = parseReply(address, reply.str(), codes);
+
+        if (result.size() != codes.size())
+            throw std::runtime_error("Expected result count equal to codes count");
+    }
+    catch (std::exception &er)
+    {
+        Log(ERROR) << er.what();
+        success = false;
+    }
+    if (curl)
+        curl_easy_cleanup(curl);
+
+    return success;
+}
+
+void Solar::readStatistics()
+{
+    time_t curTime = time(nullptr);
+    if (curTime == (time_t)-1)
+    {
+        Log(ERROR) << "Invalid time";
+        return;
+    }
+    tm localTime;
+    if (!localtime_r(&curTime, &localTime))
+    {
+        Log(ERROR) << "localtime() failed";
+        return;
+    }
+
+    if ((localTime.tm_mday == m_lastStatusUpdate.tm_mday) &&
+        (localTime.tm_year == m_lastStatusUpdate.tm_year))
+    {
+        return;
+    }
+
+    for (uint32_t address = START_ADDRESS; address <= END_ADDRESS; ++address)
+    {
+        for (int day = (int)ChannelConverter::Code::CODE_DD00; day < (int)ChannelConverter::Code::CODE_DD30; ++day)
+        {
+            std::vector<ChannelConverter::Code> codes;
+            codes.push_back((ChannelConverter::Code)day);
+            std::istringstream msg(buildMessage(codes, address));
+            std::vector<float> result;
+            if (!askConverter(address, codes, result))
+            {
+                return;
+            }
+        }
+    }
+
+    m_lastStatusUpdate = localTime;
+}
 
 
 void Solar::threadFunction()
@@ -281,68 +448,10 @@ void Solar::threadFunction()
                 codes.push_back(channel->code());
             }
 
-            std::istringstream msg(buildMessage(codes, address));
-
-            Log(DEBUG) << "Solar: Send " << msg.str();
-
-            CURL *curl = nullptr;
-            try
+            std::vector<float> result;
+            if (askConverter(address, codes, result))
             {
-                std::ostringstream reply;
-                CURLcode res;
-
-                curl = curl_easy_init();
-                if (!curl)
-                    throw std::runtime_error("Could not init curl");
-
-                curl_easy_setopt(curl, CURLOPT_URL, IP_ADDR.c_str());
-                curl_easy_setopt(curl, CURLOPT_PORT, PORT);
-                curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
-
-                res = curl_easy_perform(curl);
-                if (res != CURLE_OK)
-                    throw std::runtime_error(curl_easy_strerror(res));
-
-                curl_socket_t sockfd;
-                res = curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sockfd);
-                if (res != CURLE_OK)
-                    throw std::runtime_error(curl_easy_strerror(res));
-
-                size_t nsent = 0;
-                res = curl_easy_send(curl, msg.str().c_str(), msg.str().size(), &nsent);
-                if (res != CURLE_OK)
-                    throw std::runtime_error(curl_easy_strerror(res));
-
-                char buf[512];
-                size_t nread;
-                do
-                {
-                    nread = 0;
-                    res = curl_easy_recv(curl, buf, sizeof(buf), &nread);
-                    if (res == CURLE_AGAIN)
-                    {
-                        if (!waitOnSocket(sockfd, true, 1000L))
-                            throw std::runtime_error("Timeout");
-                    }
-                    if (nread != 0)
-                    {
-                        buf[nread] = 0;
-                        reply << buf;
-                    }
-                } while (res == CURLE_AGAIN);
-
-                if (res != CURLE_OK)
-                    throw std::runtime_error(curl_easy_strerror(res));
-
                 ++activeConverter;
-
-                Log(DEBUG) << "Solar: Reply " << reply.str();
-
-                auto result = parseReply(address, reply.str(), codes);
-
-                if (result.size() != channels.size())
-                    throw std::runtime_error("Expected result count equal to channels count");
-
                 auto it = result.cbegin();
                 for (auto &&channel : channels)
                 {
@@ -350,16 +459,14 @@ void Solar::threadFunction()
                     ++it;
                 }
             }
-            catch (std::exception &er)
-            {
-                Log(ERROR) << er.what();
-            }
-            if (curl)
-                curl_easy_cleanup(curl);
         }
 
         if (activeConverter != 0)
         {
+            // read statistics if all converters are active
+            if (activeConverter == END_ADDRESS - START_ADDRESS + 1)
+                readStatistics();
+
             std::vector<const Channel*> channels;
             for (auto &&channelsConverter : m_channelsConverter)
             {
