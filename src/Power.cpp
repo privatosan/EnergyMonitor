@@ -6,6 +6,8 @@
 #include <cmath>
 #include <iostream>
 
+#include <unistd.h>
+
 static const float REFERENCE_VOLTAGE = 3.3f;
 static const float CT_AMPERE_PER_VOLT = 30.f;
 static const uint32_t ADC_BITS = 10;
@@ -157,7 +159,7 @@ void Power::update()
         std::vector<size_t> indices;
         indices.resize(cmds.size());
         for (auto&& index : indices)
-            index = 0.f;
+            index = 0;
 
         chipID = m_voltageChannel->chipID();
         m_voltageChannel->set(curTime, results[chipID][indices[chipID]++]);
@@ -168,13 +170,30 @@ void Power::update()
             channel->set(curTime, results[chipID][indices[chipID]++]);
         }
 
+        if (time() - curTime < 1)
+            usleep(100);
+
     } while(curTime - startTime < 1000 / LINE_FREQUENCY * PERIODS_TO_READ);
 
     std::vector<float> power;
     power.resize(m_currentChannels.size());
-    for (auto&& p : power)
+
+    std::vector<float>::iterator pIt = power.begin();
+
+    for (auto&& channel : m_currentChannels)
     {
-        p = 0.f;
+        float p = 0.f;
+        for (size_t index = 0; index < channel->getValueCount(); ++index)
+        {
+            const timeValueMs time = channel->getTime(index);
+            const float current = channel->get(time);
+            const float voltage = m_voltageChannel->get(time);
+
+            p += voltage * current;
+        }
+        p /= channel->getValueCount();
+        *pIt = p;
+        pIt++;
     }
 
     for (auto&& p : power)
@@ -200,7 +219,13 @@ void Power::preStart()
 
 void Power::threadFunction()
 {
-    update();
+    size_t count = 10;
+    while (--count != 0)
+    {
+        update();
+        usleep(1000);
+    }
+
 /*
     std::vector<const Channel*> postChannels;
     for (auto &&channel : m_channels)

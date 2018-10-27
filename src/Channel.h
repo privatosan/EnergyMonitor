@@ -82,6 +82,46 @@ public:
         return m_chipID;
     }
 
+    virtual void get()
+    {
+        Log(ERROR) << "don't use";
+    }
+
+    size_t getValueCount() const
+    {
+        return m_values.size();
+    }
+
+    timeValueMs getTime(size_t index) const
+    {
+        return m_values[index].m_time;
+    }
+
+    float get(timeValueMs time) const
+    {
+        size_t index = 0;
+
+        while ((index != m_values.size()) && (time > m_values[index].m_time))
+            ++index;
+
+        size_t before = std::min(index, m_values.size() - 1);
+        size_t after = std::min(before + 1, m_values.size() - 1);
+
+        float value = m_values[before].m_value;
+        if (m_values[after].m_time != m_values[before].m_time)
+        {
+            const float factor = (time - m_values[before].m_time) / (m_values[after].m_time - m_values[before].m_time);
+            value += (m_values[after].m_value - m_values[before].m_value) * factor;
+        }
+
+        return value;
+    }
+
+    void clear()
+    {
+        m_values.clear();
+    }
+
 private:
     struct TimeValue
     {
