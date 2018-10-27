@@ -36,9 +36,12 @@ static const double PI = std::acos(-1.f);
 // calibration
 static const float CAL_OFFSET_VOLTAGE = (-2.0f / ADC_MASK); // measured
 static const float CAL_FACTOR_VOLTAGE = 1.0f;
+// CT sensor phase correction (7 degree)
+// (see https://learn.openenergymonitor.org/electricity-monitoring/ct-sensors/yhdc-ct-sensor-report)
+static const timeValueUs CAL_PHASE_CORRECTION = (LINE_PERIOD_TIME_US * 7) / 360;
 
 // how many periods to read when calculating the power
-static const uint32_t PERIODS_TO_READ = 10;
+static const uint32_t PERIODS_TO_READ = 20;
 
 
 typedef struct
@@ -48,7 +51,7 @@ typedef struct
     uint32_t m_channelID;
     float m_calOffset;
     float m_calFactor;
-    float m_calTimeOffset;
+    timeValueUs m_calTimeOffset;
 } Config;
 
 static std::vector<Config> CONFIGS_HOUSE =
@@ -67,7 +70,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 60.f) * 1800.f,
-        LINE_PERIOD_TIME_US / 3
+        (LINE_PERIOD_TIME_US * 2) / 3
     },
     {
         "HausL2",
@@ -75,7 +78,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 60.f) * 1800.f,
-        (LINE_PERIOD_TIME_US * 2) / 2
+        LINE_PERIOD_TIME_US / 3
     },
 };
 
@@ -87,7 +90,7 @@ static std::vector<Config> CONFIGS =
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1800.f,
-        0,
+        (LINE_PERIOD_TIME_US * 2) / 3
     }
 };
 
@@ -280,7 +283,8 @@ void Power::update()
     // switch scheduler to high priority
     std::unique_ptr<Scheduler> scheduler(new Scheduler());
 
-    const timeValueUs sampleTimeUs = 1000000 / LINE_FREQUENCY * PERIODS_TO_READ;
+    // samling intervale (+2 periods for phase correction)
+    const timeValueUs sampleTimeUs = LINE_PERIOD_TIME_US * (PERIODS_TO_READ + 2);
     auto startTimeUs = time();
     timeValueUs endTimeUs;
 
@@ -321,6 +325,7 @@ void Power::update()
     // back to standart priority
     scheduler.reset();
 
+#if 0
     // find zero-crossing
     startTimeUs = 0;
     endTimeUs = 0;
@@ -350,6 +355,7 @@ void Power::update()
             prevPositive = curPositive;
         }
     }
+#endif
 
 //Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 
@@ -363,38 +369,36 @@ void Power::update()
         float u = 0.f;
 //float imin = 10.f, imax = -10.f;
 //float umin = 400.f, umax = -400.f;
-        timeValueUs startSampleTimeUs = 0;
-        timeValueUs endSampleTimeUs = 0;
+        // set the sample interval to start one period after the first sample and also
+        // leave one period space at the end. This is to have space for the phase correction.
+        const timeValueUs startSampleTimeUs = channel->sampleTime(0) + LINE_PERIOD_TIME_US;
+        const timeValueUs endSampleTimeUs = startSampleTimeUs + PERIODS_TO_READ * LINE_PERIOD_TIME_US;
         for (size_t index = 0; index < channel->sampleCount() - 1; ++index)
         {
             const timeValueUs time = channel->sampleTime(index);
             // check if the time is in the interval, else continue with next sample
-            if (time < startTimeUs)
+            if (time < startSampleTimeUs)
                 continue;
-            // if this is the first sample, set the start time
-            if (startSampleTimeUs == 0)
-                startSampleTimeUs = time;
             // get the time of the next sample
             const timeValueUs nextTime = channel->sampleTime(index + 1);
             // if the next time is outside of the interval we are done
-            if (nextTime > endTimeUs)
+            if (nextTime > endSampleTimeUs)
                 break;
-            // ste the end time
-            endSampleTimeUs = nextTime;
 
             // get the current
             const float current = channel->value(index);
             // get the voltage at the time modified by the phase
-            const auto voltageTime = time + channel->timeOffset();
+            const auto voltageTime = time + channel->timeOffset() - CAL_PHASE_CORRECTION;
             // if the voltage time is outside of the interval we are done
-            if (voltageTime > endTimeUs)
-                break;
+            if ((voltageTime > endTimeUs) || (voltageTime < startTimeUs))
+                Log(ERROR) << "Voltage time " << voltageTime << "out of range (" << startSampleTimeUs << ", " << endSampleTimeUs << ")"; 
             const float voltage = m_voltageChannel->sampleAtTime(voltageTime);
 
 //imin = std::min(imin, current);
 //imax = std::max(imax, current);
 //umin = std::min(umin, voltage);
 //umax = std::max(umax, voltage);
+//std::cout << current << ";" << voltage << std::endl;
             i += current * current * (nextTime - time);
             u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
@@ -409,7 +413,7 @@ void Power::update()
         u = std::sqrt(u);
         i *= invTimeRangeUs;
         i = std::sqrt(i);
-//Log(DEBUG) << "U " << u << " I " << i << " P " << p << std::endl;
+//Log(DEBUG) << channel->name() << ": U " << u << " I " << i << " P " << p;
         channel->set(p);
     }
 }
@@ -425,7 +429,7 @@ void Power::preStart()
 
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0); //Data comes in on falling edge
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048); // 19.2MHz / 32 = 600kHz
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048); // 19.2MHz / 2048 = 9.375kHz
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS1, LOW);
 #elif defined(WIRINGPI)
@@ -459,7 +463,7 @@ void Power::threadFunction()
         channels.push_back(channel.get());
     }
 
-//    post(channels);
+    post(channels);
 }
 
 void Power::postStop()
