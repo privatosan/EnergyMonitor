@@ -191,7 +191,7 @@ void Solar::updateStat()
 
     // find the kwh channels for each converter
     uint32_t address = START_ADDRESS;
-    std::vector<uint32_t> values;
+    std::vector<float> values;
     for (auto&& channels: m_channelsConverter)
     {
         std::ostringstream name;

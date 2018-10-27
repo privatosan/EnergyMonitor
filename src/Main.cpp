@@ -17,11 +17,11 @@ int main(int argc, char * const *argv)
 
         // run solar tracking in the background
         solar.reset(new Solar);
-//        solar->start();
+        solar->start();
 
         // run power tracking in the background
-        power.reset(new Power);
-        power->start();
+//        power.reset(new Power);
+//        power->start();
 
         // wait for exit signal
         SignalHandler signalHandler;
