@@ -62,7 +62,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 62.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3
+        (LINE_PERIOD_TIME_US * 2) / 3 // L1
     },
     {
         "HausL1",
@@ -70,7 +70,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 62.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3
+        LINE_PERIOD_TIME_US / 3 // L2
     },
     {
         "HausL2",
@@ -78,7 +78,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 62.f) * 1860.f,
-        0
+        0 // L3
     },
     {
         "Wärmepumpe",
@@ -86,7 +86,7 @@ static std::vector<Config> CONFIGS_HOUSE =
         0.f,
         // (U / R) * ratio
         (1.f / 62.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3
+        (LINE_PERIOD_TIME_US * 2) / 3 // L1
     },
 };
 
@@ -98,7 +98,7 @@ static std::vector<Config> CONFIGS =
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3
+        LINE_PERIOD_TIME_US / 3 // L2
     },
     {
         "Arbeitszimmer",
@@ -106,7 +106,7 @@ static std::vector<Config> CONFIGS =
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3
+        LINE_PERIOD_TIME_US / 3 // L2
     },
     {
         "Technikraum",
@@ -114,7 +114,7 @@ static std::vector<Config> CONFIGS =
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
-        0
+        0 // L3
     },
     {
         "Garage",
@@ -122,15 +122,55 @@ static std::vector<Config> CONFIGS =
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
-        0
+        0 // L3
     },
     {
         "Kuehlschrank",
-        1, 8,
+        1, 0,
         0.f,
         // (U / R) * ratio
         (1.f / 120.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3
+        (LINE_PERIOD_TIME_US * 2) / 3 // L1
+    },
+    {
+        "Waschkueche",
+        1, 1,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3 // L2
+    },
+    {
+        "Backofen",
+        1, 2,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        (LINE_PERIOD_TIME_US * 2) / 3 // L1
+    },
+    {
+        "HerdL1",
+        1, 3,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        (LINE_PERIOD_TIME_US * 2) / 3 // L1
+    },
+    {
+        "HerdL2",
+        1, 4,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3 // L2
+    },
+    {
+        "HerdL3",
+        1, 5,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 120.f) * 1860.f,
+        0 // L3
     }
 };
 
