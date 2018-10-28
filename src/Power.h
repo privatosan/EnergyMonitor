@@ -20,7 +20,7 @@ private:
     std::unique_ptr<ChannelAD> m_voltageChannel;
     std::vector<std::unique_ptr<ChannelAD>> m_currentChannels;
 
-    void update();
+    void update(std::unique_ptr<ChannelAD> &channel);
 
     virtual void preStart();
     virtual void postStop();

@@ -326,11 +326,10 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
 #endif
 }
 
-void Power::update()
+void Power::update(std::unique_ptr<ChannelAD> &channel)
 {
     std::vector<std::vector<Command>> cmds;
 
-    for (auto&& channel : m_currentChannels)
     {
         const uint32_t chipID = channel->chipID();
         if (chipID >= cmds.size())
@@ -357,6 +356,7 @@ void Power::update()
     auto startTimeUs = time();
     timeValueUs endTimeUs;
 
+    // read and write to channels
     do
     {
         endTimeUs = time();
@@ -376,13 +376,10 @@ void Power::update()
         for (auto&& index: indices)
             index = 0;
 
-        for (auto&& channel: m_currentChannels)
-        {
-            chipID = channel->chipID();
-            channel->setSample(times[chipID][indices[chipID]],
-                values[chipID][indices[chipID]]);
-            indices[chipID]++;
-        }
+        chipID = channel->chipID();
+        channel->setSample(times[chipID][indices[chipID]],
+            values[chipID][indices[chipID]]);
+        indices[chipID]++;
 
         chipID = m_voltageChannel->chipID();
         m_voltageChannel->setSample(times[chipID][indices[chipID]],
@@ -429,9 +426,8 @@ void Power::update()
 //Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 
     // calculate power
-    for (auto&& channel : m_currentChannels)
     {
-//Log(DEBUG) << "Samples " << channel->sampleCount();
+        Log(DEBUG) << "Samples [" << channel->chipID() << ":" << channel->channelID() << "] " << channel->sampleCount();
 
         float p = 0.f;
         float i = 0.f;
@@ -467,7 +463,7 @@ void Power::update()
 //imax = std::max(imax, current);
 //umin = std::min(umin, voltage);
 //umax = std::max(umax, voltage);
-//std::cout << current << ";" << voltage << std::endl;
+//std::cout << current << ";" << voltage << ";" << time << std::endl;
 //            i += current * current * (nextTime - time);
 //            u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
@@ -519,7 +515,10 @@ void Power::preStart()
 
 void Power::threadFunction()
 {
-    update();
+    for (auto &&channel : m_currentChannels)
+    {
+        update(channel);
+    }
 
     std::vector<const Channel*> channels;
     for (auto &&channel : m_currentChannels)

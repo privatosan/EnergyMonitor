@@ -73,6 +73,11 @@ public:
         return m_chipID;
     }
 
+    uint32_t channelID() const
+    {
+        return m_channelID;
+    }
+
     timeValueUs timeOffset() const
     {
         return m_timeOffsetUs;
