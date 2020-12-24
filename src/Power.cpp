@@ -81,12 +81,28 @@ static std::vector<Config> CONFIGS_HOUSE =
         0 // L3
     },
     {
-        "Wärmepumpe",
-        0, 4,
+        "WärmepumpeL1",
+        1, 3,
         0.f,
         // (U / R) * ratio
         (1.f / 62.f) * 1860.f,
         (LINE_PERIOD_TIME_US * 2) / 3 // L1
+    },
+    {
+        "WärmepumpeL2",
+        1, 4,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 62.f) * 1860.f,
+        LINE_PERIOD_TIME_US / 3 // L2
+    },
+    {
+        "WärmepumpeL3",
+        0, 4,
+        0.f,
+        // (U / R) * ratio
+        (1.f / 62.f) * 1860.f,
+        0 // L3
     },
 };
 
@@ -148,30 +164,6 @@ static std::vector<Config> CONFIGS =
         (1.f / 120.f) * 1860.f,
         (LINE_PERIOD_TIME_US * 2) / 3 // L1
     },
-    {
-        "HerdL1",
-        1, 3,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3 // L1
-    },
-    {
-        "HerdL2",
-        1, 4,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "HerdL3",
-        1, 5,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        0 // L3
-    }
 };
 
 #ifndef RPI

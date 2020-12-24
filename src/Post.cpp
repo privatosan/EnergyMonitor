@@ -25,7 +25,7 @@ void post(const std::vector<const Channel*> &channels)
         url << channel->name() << ":" << channel->value();
         addComma = true;
     }
-    url << "}&apikey=ab7fc3c6f67f0b0369cc1aca4afd9e4c";
+    url << "}&apikey=d734e9c813aa3da818b11a76e985ea74";
     try
     {
         curlpp::Cleanup cleaner;

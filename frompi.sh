@@ -1,1 +1,1 @@
-scp -p -r pi@192.168.178.21:/home/pi/data/energymeter .
+scp -p -r pi@192.168.178.21:/var/opt/emoncms/projects/EnergyMonitor .
