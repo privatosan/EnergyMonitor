@@ -1,3 +1,7 @@
 [submodule "ext/curlpp"]
 	path = ext/curlpp
 	url = git@github.com:jpbarrette/curlpp.git
+[submodule "ext/json"]
+	shallow = true
+	path = ext/json
+	url = https://github.com/nlohmann/json.git
