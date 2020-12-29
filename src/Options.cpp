@@ -86,41 +86,25 @@ void Options::parseCmdLine(int argc, char * const *argv)
                 "    Sets the update period to PERIOD seconds. Default " << m_updatePeriod.count() << ".\n";
             exit(EXIT_SUCCESS);
         case 'l':
+            if (std::string(optarg) == "DEBUG")
             {
-                std::ostringstream s;
-                s << DEBUG;
-                if (std::string(optarg) == s.str())
-                {
-                    m_logLevel = DEBUG;
-                    break;
-                }
+                m_logLevel = DEBUG;
+                break;
             }
+            else if (std::string(optarg) == "INFO")
             {
-                std::ostringstream s;
-                s << INFO;
-                if (std::string(optarg) == s.str())
-                {
-                    m_logLevel = INFO;
-                    break;
-                }
+                m_logLevel = INFO;
+                break;
             }
+            else    if (std::string(optarg) == "WARN")
             {
-                std::ostringstream s;
-                s << WARN;
-                if (std::string(optarg) == s.str())
-                {
-                    m_logLevel = WARN;
-                    break;
-                }
+                m_logLevel = WARN;
+                break;
             }
+            else if (std::string(optarg) == "ERROR")
             {
-                std::ostringstream s;
-                s << ERROR;
-                if (std::string(optarg) == s.str())
-                {
-                    m_logLevel = ERROR;
-                    break;
-                }
+                m_logLevel = ERROR;
+                break;
             }
             throw std::runtime_error("Invalid log level");
             break;
