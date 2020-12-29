@@ -1,0 +1,131 @@
+{
+    "hardware": {
+        "refVoltage": 3.2986,
+        "adcOffsetVoltage": 1.6488
+    },
+    "currentChannels": [
+        {
+            "name": "HausL0",
+            "chipID": 0,
+            "channelID": 0,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 1
+        },
+        {
+            "name": "HausL1",
+            "chipID": 0,
+            "channelID": 1,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 2
+        },
+        {
+            "name": "HausL2",
+            "chipID": 0,
+            "channelID": 2,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 3
+        },
+        {
+            "name": "Wohnzimmer",
+            "chipID": 0,
+            "channelID": 3,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 2
+        },
+        {
+            "name": "WärmepumpeL3",
+            "chipID": 0,
+            "channelID": 4,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 3
+        },
+        {
+            "name": "Arbeitszimmer",
+            "chipID": 0,
+            "channelID": 5,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 3
+        },
+        {
+            "name": "Technikraum",
+            "chipID": 0,
+            "channelID": 6,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 3
+        },
+        {
+            "name": "Garage",
+            "chipID": 0,
+            "channelID": 7,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 3
+        },
+        {
+            "name": "Kuehlschrank",
+            "chipID": 1,
+            "channelID": 0,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 1
+        },
+        {
+            "name": "Waschkueche",
+            "chipID": 1,
+            "channelID": 1,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 2
+        },
+        {
+            "name": "Backofen",
+            "chipID": 1,
+            "channelID": 2,
+            "calibOffset": 0.0,
+            "resistance": 120.0,
+            "phase": 1
+        },
+        {
+            "name": "WärmepumpeL1",
+            "chipID": 1,
+            "channelID": 3,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 1
+        },
+        {
+            "name": "WärmepumpeL2",
+            "chipID": 1,
+            "channelID": 4,
+            "calibOffset": 0.0,
+            "resistance": 62.0,
+            "phase": 2
+        }
+    ],
+    "voltageChannel": {
+        "name": "L3",
+        "chipID": 1,
+        "channelID": 7,
+        "phase": 3
+    },
+    "sumChannels": [
+        {
+            "name": "use",
+            "sources": [
+                "HausL0",
+                "HausL1",
+                "HausL2",
+                "WärmepumpeL1",
+                "WärmepumpeL2",
+                "WärmepumpeL3"
+            ]
+        }
+    ]
+}

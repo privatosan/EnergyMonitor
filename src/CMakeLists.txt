@@ -20,6 +20,7 @@ set(SOURCES
     Options.cpp
     Post.cpp
     Power.cpp
+    Settings.cpp
     SignalHandler.cpp
     Solar.cpp
     SolarMax.cpp
@@ -52,5 +53,5 @@ target_link_libraries(${BINARY_NAME}
     ${CURL_LIBRARIES}
     curlpp
     pthread
+    nlohmann_json::nlohmann_json
     )
-

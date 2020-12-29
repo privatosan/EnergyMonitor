@@ -1,5 +1,6 @@
 #include "Power.h"
 #include "Post.h"
+#include "Settings.h"
 
 #ifdef BCM2835
 #include <bcm2835/bcm2835.h>
@@ -12,16 +13,14 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <sstream>
 
 #include <unistd.h>
 #include <sched.h>
 
-static const float REFERENCE_VOLTAGE = 3.2986f; // measured
-// AD inputs are offset by this voltage so that DC voltages can be measured
-static const float ADC_OFFSET_VOLTAGE = 1.6488f; // measured
 static const uint32_t ADC_BITS = 10;
 static const uint32_t ADC_MASK = (1 << ADC_BITS) - 1;
-// zero point (ADC input connected to ADC_OFFSET_VOLTAGE)
+// zero point (ADC input connected to 'adcOffsetVoltage')
 static const float ADC_OFFSET = (511.0f / ADC_MASK);
 static const float LINE_VOLTAGE = 230.0f;
 static const float LINE_VOLTAGE_PEAK = LINE_VOLTAGE * std::sqrt(2.f);
@@ -43,128 +42,6 @@ static const timeValueUs CAL_PHASE_CORRECTION = (LINE_PERIOD_TIME_US * 7) / 360;
 // how many periods to read when calculating the power
 static const uint32_t PERIODS_TO_READ = 20;
 
-
-typedef struct
-{
-    const char *m_name;
-    uint32_t m_chipID;
-    uint32_t m_channelID;
-    float m_calOffset;
-    float m_calFactor;
-    timeValueUs m_calTimeOffset;
-} Config;
-
-static std::vector<Config> CONFIGS_HOUSE =
-{
-    {
-        "HausL0",
-        0, 0,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3 // L1
-    },
-    {
-        "HausL1",
-        0, 1,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "HausL2",
-        0, 2,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        0 // L3
-    },
-    {
-        "WärmepumpeL1",
-        1, 3,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3 // L1
-    },
-    {
-        "WärmepumpeL2",
-        1, 4,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "WärmepumpeL3",
-        0, 4,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 62.f) * 1860.f,
-        0 // L3
-    },
-};
-
-static std::vector<Config> CONFIGS =
-{
-    {
-        "Wohnzimmer",
-        0, 3,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "Arbeitszimmer",
-        0, 5,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "Technikraum",
-        0, 6,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        0 // L3
-    },
-    {
-        "Garage",
-        0, 7,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        0 // L3
-    },
-    {
-        "Kuehlschrank",
-        1, 0,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3 // L1
-    },
-    {
-        "Waschkueche",
-        1, 1,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        LINE_PERIOD_TIME_US / 3 // L2
-    },
-    {
-        "Backofen",
-        1, 2,
-        0.f,
-        // (U / R) * ratio
-        (1.f / 120.f) * 1860.f,
-        (LINE_PERIOD_TIME_US * 2) / 3 // L1
-    },
-};
 
 #ifndef RPI
 #ifdef BCM2835
@@ -211,21 +88,76 @@ private:
 
 Power::Power()
 {
-    m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum("use")));
+    auto &settings = Settings::getInstance();
 
-    for (auto &&config: CONFIGS_HOUSE)
     {
-        m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(config.m_name, config.m_chipID, config.m_channelID,
-            -ADC_OFFSET + config.m_calOffset, REFERENCE_VOLTAGE * config.m_calFactor, config.m_calTimeOffset)));
-        m_channels[0]->add(m_currentChannels.back().get());
-    }
-    for (auto &&config: CONFIGS)
-    {
-        m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(config.m_name, config.m_chipID, config.m_channelID,
-            -ADC_OFFSET + config.m_calOffset, REFERENCE_VOLTAGE * config.m_calFactor, config.m_calTimeOffset)));
+        auto hardware = settings.get("hardware");
+        m_refVoltage = hardware.at("refVoltage");
+        Log(INFO) << "refVoltage " << m_refVoltage;
+        m_adcOffsetVoltage = hardware.at("adcOffsetVoltage");
+        Log(INFO) << "adcOffsetVoltage " << m_adcOffsetVoltage;
     }
 
-    m_voltageChannel.reset(new ChannelAD("L1", 1, 7, -ADC_OFFSET + CAL_OFFSET_VOLTAGE, REFERENCE_VOLTAGE * TRANSFORMER_LINE_VOLTAGE_RATIO * CAL_FACTOR_VOLTAGE));
+    int voltageChannelPhase;
+    {
+        auto channel = settings.get("voltageChannel");
+        const std::string channelName = channel.at("name");
+        const int chipID = channel.at("chipID");
+        const int channelID = channel.at("channelID");
+        voltageChannelPhase = channel.at("phase");
+        Log(INFO) << "Adding voltage channel " << channelName << " at " << chipID << ":" << channelID << " phase " << voltageChannelPhase;
+        m_voltageChannel.reset(new ChannelAD(channelName, chipID, channelID, -1.f * ADC_OFFSET + CAL_OFFSET_VOLTAGE,
+            m_refVoltage * TRANSFORMER_LINE_VOLTAGE_RATIO * CAL_FACTOR_VOLTAGE));
+    }
+
+    Log(INFO) << "Adding current channels...";
+    auto currentChannels = settings.get("currentChannels");
+    for (auto &channel: currentChannels)
+    {
+        const std::string channelName = channel.at("name");
+        const int chipID = channel.at("chipID");
+        const int channelID = channel.at("channelID");
+        const float calibOffset = channel.at("calibOffset");
+        const float resistance = channel.at("resistance");
+        const int phase = channel.at("phase");
+        Log(INFO) << " " << channelName << " at " << chipID << ":" << channelID << " calibOffset " << calibOffset <<
+            " resistance " << resistance << " phase " << phase;
+
+        // (U / R) * ratio
+        const float calibFactor = (1.f / resistance) * 1860.f;
+        const float calibTimeOffset = (LINE_PERIOD_TIME_US * (voltageChannelPhase - phase)) / 3;
+
+        m_currentChannels.push_back(std::unique_ptr<ChannelAD>(new ChannelAD(channelName, chipID, channelID,
+            -1.f * ADC_OFFSET + calibOffset, m_refVoltage * calibFactor, calibTimeOffset)));
+    }
+
+    // create the sum channels
+    Log(INFO) << "Adding sum channels...";
+    auto sumChannels = settings.get("sumChannels");
+    for (auto &channel: sumChannels)
+    {
+        const std::string channelName = channel.at("name");
+        Log(INFO) << " " << channelName << std::endl << " sources";
+        m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum(channelName)));
+        
+        auto &c = m_channels.back();
+        auto sources = channel.at("sources");
+        for (auto &source: sources)
+        {
+            const std::string sourceName = source;
+            Log(INFO) << "  " << sourceName;
+            const auto it = std::find_if(m_currentChannels.begin(), m_currentChannels.end(),
+                [&sourceName](const std::unique_ptr<ChannelAD> &channel){ return sourceName == channel->name(); });
+            if (it == m_currentChannels.end())
+            {
+                std::stringstream msg;
+                msg << "Can't find channel " << source << " to be added to sum channel " << c->name();
+                throw std::runtime_error(msg.str());
+            }
+            c->add(it->get());
+        }
+    }
+    Log(INFO) << "..done";
 }
 
 Power::~Power()
@@ -310,7 +242,7 @@ static void read(uint32_t chipID, std::vector<Command> &cmds, std::vector<float>
 
         float value = wave * factor[chipID][cmd.m_sequence.m_bitfield.m_channel];
         // convert to -.5 ... .5
-        value /= REFERENCE_VOLTAGE / 2.f;
+        value /= m_refVoltage / 2.f;
         // and to 0 ... 1
         value += 0.5f;
         values.push_back(value);
@@ -413,19 +345,18 @@ void Power::update(std::unique_ptr<ChannelAD> &channel)
             prevPositive = curPositive;
         }
     }
+    //Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 #endif
 
-//Log(DEBUG) << "Found " << periods << " periods, frequency " << periods / ((endTimeUs - startTimeUs) / 1000000.f) << " Hz";
 
     // calculate power
     {
-        Log(DEBUG) << "Samples [" << channel->chipID() << ":" << channel->channelID() << "] " << channel->sampleCount();
+        //Log(DEBUG) << "Samples [" << channel->chipID() << ":" << channel->channelID() << "] " << channel->sampleCount();
 
         float p = 0.f;
-        float i = 0.f;
-        float u = 0.f;
-//float imin = 10.f, imax = -10.f;
-//float umin = 400.f, umax = -400.f;
+        //float i = 0.f;
+        //float u = 0.f;
+
         // set the sample interval to start one period after the first sample and also
         // leave one period space at the end. This is to have space for the phase correction.
         const timeValueUs startSampleTimeUs = channel->sampleTime(0) + LINE_PERIOD_TIME_US;
@@ -451,26 +382,20 @@ void Power::update(std::unique_ptr<ChannelAD> &channel)
                 Log(ERROR) << "Voltage time " << voltageTime << "out of range (" << startSampleTimeUs << ", " << endSampleTimeUs << ")"; 
             const float voltage = m_voltageChannel->sampleAtTime(voltageTime);
 
-//imin = std::min(imin, current);
-//imax = std::max(imax, current);
-//umin = std::min(umin, voltage);
-//umax = std::max(umax, voltage);
-//std::cout << current << ";" << voltage << ";" << time << std::endl;
-//            i += current * current * (nextTime - time);
-//            u += voltage * voltage * (nextTime - time);
+            //i += current * current * (nextTime - time);
+            //u += voltage * voltage * (nextTime - time);
             p += (voltage * current) * (nextTime - time);
         }
 
-//Log(DEBUG) << "I min/max " << imin << " " << imax;
-//Log(DEBUG) << "U min/max " << umin << " " << umax;
-
         const float invTimeRangeUs = 1.f / (float)(endSampleTimeUs - startSampleTimeUs);
         p *= invTimeRangeUs;
-//        u *= invTimeRangeUs;
-//        u = std::sqrt(u);
-//        i *= invTimeRangeUs;
-//        i = std::sqrt(i);
-//Log(DEBUG) << channel->name() << ": U " << u << " I " << i << " P " << p;
+
+        //u *= invTimeRangeUs;
+        //u = std::sqrt(u);
+        //i *= invTimeRangeUs;
+        //i = std::sqrt(i);
+        //Log(DEBUG) << channel->name() << ": U " << u << " I " << i << " P " << p;
+
         channel->set(p);
     }
 }
