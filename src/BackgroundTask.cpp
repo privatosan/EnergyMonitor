@@ -3,8 +3,9 @@
 
 #include "Log.h"
 
-BackgroundTask::BackgroundTask()
-    : m_stop(false)
+BackgroundTask::BackgroundTask(bool periodical)
+    : m_periodical(periodical)
+    , m_stop(false)
 {
 }
 
@@ -47,6 +48,13 @@ void BackgroundTask::threadLoop()
         threadFunction();
 
         std::unique_lock<std::mutex> lock(cv_mutex);
-        m_conditionVariable.wait_for(lock, Options::getInstance().updatePeriod());
+        if (m_periodical)
+        {
+            m_conditionVariable.wait_for(lock, Options::getInstance().updatePeriod());
+        }
+        else
+        {
+            m_conditionVariable.wait(lock);
+        }
     }
 }

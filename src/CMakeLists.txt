@@ -8,6 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_BUILD_TYPE)
 
 find_package(CURL REQUIRED)
+find_package(websocketpp REQUIRED CONFIG)
 
 project(energyMeter)
 
@@ -20,6 +21,7 @@ set(SOURCES
     Options.cpp
     Post.cpp
     Power.cpp
+    Server.cpp
     Settings.cpp
     SignalHandler.cpp
     Solar.cpp
@@ -54,4 +56,6 @@ target_link_libraries(${BINARY_NAME}
     curlpp
     pthread
     nlohmann_json::nlohmann_json
+    websocketpp::websocketpp
+    asio
     )

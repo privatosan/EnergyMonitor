@@ -1,6 +1,7 @@
 #include "Power.h"
 #include "Post.h"
 #include "Settings.h"
+#include "Server.h"
 
 #ifdef BCM2835
 #include <bcm2835/bcm2835.h>
@@ -87,6 +88,7 @@ private:
 
 
 Power::Power()
+    : BackgroundTask(true)
 {
     auto &settings = Settings::getInstance();
 
@@ -449,6 +451,14 @@ void Power::threadFunction()
     }
 
     post(channels);
+
+    channels.clear();
+    for (auto &&channel : m_currentChannels)
+    {
+        channels.push_back(channel.get());
+    }
+    channels.push_back(m_voltageChannel.get());
+    Server::getInstance().update(channels);
 }
 
 void Power::postStop()
