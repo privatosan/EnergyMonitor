@@ -8,7 +8,8 @@
 class BackgroundTask
 {
 public:
-    BackgroundTask();
+    BackgroundTask(bool periodical);
+    BackgroundTask() = delete;
     ~BackgroundTask();
 
     void start();
@@ -19,6 +20,7 @@ private:
 
     std::condition_variable m_conditionVariable;
     std::mutex cv_mutex;
+    bool m_periodical;
     bool m_stop;
 
     void threadLoop();

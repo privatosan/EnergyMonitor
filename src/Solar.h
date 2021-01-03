@@ -30,15 +30,9 @@ public:
         return m_value.get();
     }
 
-    SolarMax::Value *daily() const
-    {
-        return m_value.get();
-    }
-
 private:
     uint32_t m_address;
     std::unique_ptr<SolarMax::Value> m_value;
-    std::unique_ptr<SolarMax::Value> m_daiy;
 };
 
 class Solar : public BackgroundTask

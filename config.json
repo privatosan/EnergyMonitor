@@ -48,9 +48,9 @@
             "name": "Arbeitszimmer",
             "chipID": 0,
             "channelID": 5,
-            "calibOffset": 0.0,
+            "calibOffset": -0.0029296875,
             "resistance": 120.0,
-            "phase": 3
+            "phase": 2
         },
         {
             "name": "Technikraum",
@@ -64,7 +64,7 @@
             "name": "Garage",
             "chipID": 0,
             "channelID": 7,
-            "calibOffset": 0.0,
+            "calibOffset": -0.0029296875,
             "resistance": 120.0,
             "phase": 3
         },
@@ -80,7 +80,7 @@
             "name": "Waschkueche",
             "chipID": 1,
             "channelID": 1,
-            "calibOffset": 0.0,
+            "calibOffset": -0.001953125,
             "resistance": 120.0,
             "phase": 2
         },
