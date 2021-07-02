@@ -8,6 +8,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 
 static const std::string IP_ADDR("127.0.0.1");
 
@@ -62,9 +63,11 @@ void postToPVOutput(const std::string &date, float dailyKWh, float dailyMax,
         request.setOpt(new curlpp::options::HttpHeader(header));
 
         std::ostringstream data;
-        data << "data=" << date << "," << dailyKWh << "," << dailyKWh << "," << dailyMax << "," <<
+        data << "data=" << date << "," << std::round(dailyKWh) << "," << std::round(dailyKWh) << "," << std::round(dailyMax) << "," <<
             std::setfill('0') << std::setw(2) << dailyMaxHour << ":" <<
             std::setfill('0') << std::setw(2) << dailyMaxMinute;
+
+        Log(DEBUG) << "pvoutput msg: " << data.str();
 
         request.setOpt(new curlpp::options::PostFields(data.str()));
         request.setOpt(new curlpp::options::PostFieldSize(data.str().length() + 1));

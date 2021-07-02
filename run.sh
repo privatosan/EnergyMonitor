@@ -1,2 +1,1 @@
-sudo build/src/energyMeter &
-#>> errlog.txt 2>&1 &
+sudo bash -c "build/src/energyMeter >> /var/log/energymonitor/errlog.txt 2>&1" &
