@@ -16,7 +16,8 @@ static const uint32_t END_ADDRESS = 3;
 static const uint32_t NUM_CONVERTER = END_ADDRESS - START_ADDRESS + 1;
 
 Solar::Solar()
-    : m_statChanged(false)
+    : BackgroundTask(true)
+    , m_statChanged(false)
     , m_max(0.f)
     , m_maxHour(0)
     , m_maxMinute(0)

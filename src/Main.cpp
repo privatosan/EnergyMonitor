@@ -3,6 +3,7 @@
 #include "Power.h"
 #include "Options.h"
 #include "Log.h"
+#include "Server.h"
 
 #include <unistd.h>
 
@@ -39,6 +40,8 @@ int main(int argc, char * const *argv)
         power->stop();
     if (solar)
         solar->stop();
+
+    Server::getInstance().shutdown();
 
     return 0;
 }

@@ -1,7 +1,16 @@
 [submodule "ext/curlpp"]
+	shallow = true
 	path = ext/curlpp
 	url = git@github.com:jpbarrette/curlpp.git
 [submodule "ext/json"]
 	shallow = true
 	path = ext/json
 	url = https://github.com/nlohmann/json.git
+[submodule "ext/websocketpp"]
+	shallow = true
+	path = ext/websocketpp
+	url = https://github.com/zaphoyd/websocketpp.git
+[submodule "ext/asio"]
+	shallow = true
+	path = ext/asio
+	url = https://github.com/chriskohlhoff/asio.git

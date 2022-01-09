@@ -1,6 +1,7 @@
 #include "Power.h"
 #include "Post.h"
 #include "Settings.h"
+#include "Server.h"
 
 #ifdef BCM2835
 #include <bcm2835/bcm2835.h>
@@ -87,6 +88,7 @@ private:
 
 
 Power::Power()
+    : BackgroundTask(true)
 {
     auto &settings = Settings::getInstance();
 
@@ -139,7 +141,7 @@ Power::Power()
         const std::string channelName = channel.at("name");
         Log(INFO) << " " << channelName << std::endl << " sources";
         m_channels.push_back(std::unique_ptr<ChannelSum>(new ChannelSum(channelName)));
-        
+
         auto &c = m_channels.back();
         auto sources = channel.at("sources");
         for (auto &source: sources)
@@ -449,6 +451,14 @@ void Power::threadFunction()
     }
 
     post(channels);
+
+    std::vector<const ChannelAD*> channelsAD;
+    for (auto &&channel : m_currentChannels)
+    {
+        channelsAD.push_back(channel.get());
+    }
+    channelsAD.push_back(m_voltageChannel.get());
+    Server::getInstance().update(channelsAD);
 }
 
 void Power::postStop()
