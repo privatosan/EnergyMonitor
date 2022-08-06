@@ -6,7 +6,7 @@ import Source from './Source/Source';
 
 const sources = (props) => {
     const sourceList = props.sources.map(source => {
-        return <Source name={source} key={source} />;
+        return <Source name={source} key={source} onChange={props.onChange}/>;
     });
 
     return (

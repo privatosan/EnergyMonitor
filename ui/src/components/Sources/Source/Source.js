@@ -6,7 +6,14 @@ import Checkbox from '@material-ui/core/Checkbox';
 const source = (props) => {
     return (
         <div>
-            <FormControlLabel control={<Checkbox name={props.name} />} label={props.name} />
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        name={props.name}
+                        onChange={(event) => props.onChange(props.name, event.target.checked)}
+                    />}
+                label={props.name}
+                />
         </div>
     );
 };
