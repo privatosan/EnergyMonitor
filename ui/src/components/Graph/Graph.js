@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 
 import './Graph.css'
 
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ReferenceArea } from 'recharts';
+import { ResponsiveContainer, ScatterChart, Scatter, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ReferenceArea } from 'recharts';
 
 const colors = ["#ffd700",
     "#ffb14e",
@@ -11,6 +11,10 @@ const colors = ["#ffd700",
     "#cd34b5",
     "#9d02d7",
     "#0000ff"];
+
+const RenderNoShape = (props) => {
+    return null;
+}
 
 class Graph extends Component {
     constructor(props) {
@@ -57,16 +61,17 @@ class Graph extends Component {
     }
 
     //<button className="btn update" onClick={this.zoomOut.bind(this)} width='100%'>
-  //  Zoom Out
-//</button>
+    //  Zoom Out
+    //</button>
 
+    /*    <Scatter name="A school" data={data01} fill="#8884d8" line shape="cross" />
+        <Scatter name="B school" data={data02} fill="#82ca9d" line shape="diamond" />*/
 
     render() {
         return (
             <div className="Graph">
                 <ResponsiveContainer width='100%' aspect={16.0 / 9.0}>
-                    <LineChart
-                        data={this.props.data}
+                    <ScatterChart
                         onMouseDown={e =>
                             e &&
                             this.setState({ refAreaLeft: e.activeLabel })}
@@ -78,24 +83,41 @@ class Graph extends Component {
                         onMouseUp={this.zoom.bind(this)}
                         margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
                     >
-                        {this.props.dataKeys.map(dataKey => (
-                            <Line
-                                type="monotone"
-                                dataKey={dataKey}
-                                stroke={colors[Math.floor(Math.random() * 7)]}
-                                dot={false}
-                                key={dataKey}
+                        {Array.from(this.props.data).map((element, index) => (
+                            <Scatter
+                                name={element[0]}
+                                data={element[1]}
+                                yAxisId={element[0].endsWith("_voltage") ? 1 : 0}
+                                fill={colors[index]}
+                                line
+                                shape={<RenderNoShape />}
+                                isAnimationActive={false}
                             />))}
+                        <Legend />
                         <CartesianGrid stroke="#ccc" />
                         <XAxis
                             dataKey="time"
+                            name="periods"
+                            type="number"
                             allowDataOverflow={true}
                             domain={[this.state.left, this.state.right]}
-                            type="number"
                         />
                         <YAxis
-                            //allowDataOverflow={true}
-                            //domain={[this.state.bottom, this.state.top]}
+                            yAxisId={0}
+                            dataKey="current"
+                            name="current"
+                            type="number"
+                        //allowDataOverflow={true}
+                        //domain={[this.state.bottom, this.state.top]}
+                        />
+                        <YAxis
+                            yAxisId={1}
+                            dataKey="voltage"
+                            name="voltage"
+                            type="number"
+                            orientation="right"
+                        //allowDataOverflow={true}
+                        //domain={[this.state.bottom, this.state.top]}
                         />
                         <Tooltip />
                         <Legend />
@@ -106,7 +128,7 @@ class Graph extends Component {
                                 strokeOpacity={0.3}
                             />
                         ) : null}
-                    </LineChart>
+                    </ScatterChart>
                 </ResponsiveContainer>
             </div>
         );

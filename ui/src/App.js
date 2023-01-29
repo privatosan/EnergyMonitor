@@ -22,8 +22,7 @@ class App extends Component {
       client: new W3CWebSocket('ws://192.168.178.21:9002'),
       names: ["L1", "Wohnzimmer"],
       selected: new Set(),
-      data: new Map(),
-      graphData: []
+      data: new Map()
     }
 
     this.state.client.onopen = () => {
@@ -38,35 +37,28 @@ class App extends Component {
         this.setState({ names: Object.values(dataFromServer.data.names) });
       }
       if (dataFromServer.type === "Values") {
+        // build the final graph data with the format
+        // { "L0":
+        //  [
+        //   { "x": 0, "y": 100 },
+        //   { "x": 1, "y": 50 },
+        //   { "x": 2, "y": 10 }
+        //  ]
+        // },
+        // { "Wohnzimmer":
+        //  [
+        //   { "x": 0, y": 20 },
+        //   { "x": 1, y": 10 },
+        //   { "x": 2, y": 30 }
+        //  ]
+        // };
+        const unit = dataFromServer.data.name.endsWith("_voltage") ? "voltage" : "current";
+        const graphData = dataFromServer.data.values.map(element => (
+          { "time": element[0] / 20000.0, [unit]: element[1] }
+        ))
         const updatedData = new Map(this.state.data);
-        updatedData.set(dataFromServer.data.name, dataFromServer.data.values);
-        // build a map with entries for each time step
-        const timeStepMap = new Map();
-        updatedData.forEach((channelData, channelName) => {
-          channelData.forEach((element) => {
-            // convert from us to periods
-            const time = element[0] / 20000.0;
-            const timeStep = timeStepMap.get(time);
-            if (timeStep) {
-              timeStep[channelName] = element[1];
-            }
-            else {
-              timeStepMap.set(time, { [channelName]: element[1] });
-            }
-          })
-        });
-        // now build the final graph data with the format
-        // [
-        //  { time: '0', L0: 100, Wohnzimmer: 20 },
-        //  { time: '1', L0: 50, Wohnzimmer: 10 },
-        //  { time: '2', L0: 10, Wohnzimmer: 30 }
-        // ];
-        const graphData = [];
-        timeStepMap.forEach((data, time) => {
-          graphData.push({ time: time, ...data });
-        });
-        graphData.sort((a, b) => (a.time - b.time));
-        this.setState({ data: updatedData, graphData: graphData });
+        updatedData.set(dataFromServer.data.name, graphData);
+        this.setState({ data: updatedData });
       }
     };
   }
@@ -97,7 +89,7 @@ class App extends Component {
     return (
       <div className="App">
         <Sources sources={this.state.names} onChange={(name, value) => this.sourceSelectionChanged(name, value)} />
-        <Graph data={this.state.graphData} dataKeys={[...this.state.selected]} />
+        <Graph data={this.state.data} />
       </div>
     );
   }
